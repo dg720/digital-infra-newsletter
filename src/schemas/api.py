@@ -50,7 +50,7 @@ class UpdateSectionResponse(BaseModel):
     
     newsletter_id: str
     section_id: str
-    paths: Dict[str, str] = Field(description="Paths to updated artifacts")
+    paths: Optional[Dict[str, str]] = Field(default=None, description="Paths to updated artifacts")
     status: str = Field(default="completed")
 
 

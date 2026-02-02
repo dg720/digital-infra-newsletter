@@ -220,12 +220,11 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
     return (
       <section
         key={key}
-        className={`relative transition-all duration-500 ${
-          isUpdatingThis ? "opacity-40 blur-[2px]" : ""
-        } ${isHighlighted ? "rounded-lg ring-2 ring-green-500/40 ring-offset-4 ring-offset-background" : ""}`}
+        className={`relative ${isHighlighted ? "rounded-lg ring-2 ring-green-500/40 ring-offset-4 ring-offset-background" : ""}`}
       >
+        {/* Status badge - above blur layer */}
         {isUpdatingThis && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
             <div className="flex items-center gap-2 rounded-full bg-card px-4 py-2 shadow-lg border">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <span className="text-sm font-medium text-foreground">
@@ -234,6 +233,9 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
             </div>
           </div>
         )}
+        
+        {/* Section content - gets blurred when updating */}
+        <div className={`transition-all duration-500 ${isUpdatingThis ? "opacity-40 blur-[2px]" : ""}`}>
 
         <div className="mb-4 flex items-center gap-3">
           <div className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
@@ -291,6 +293,7 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
             ))}
           </div>
         )}
+        </div>
       </section>
     )
   }
