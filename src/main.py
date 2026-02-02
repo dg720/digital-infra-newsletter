@@ -71,6 +71,7 @@ def sse_event(event: str, data: dict) -> str:
 async def generate_newsletter_stream(
     prompt: str,
     max_review_rounds: int = 2,
+    active_players: dict = None,
 ) -> AsyncGenerator[str, None]:
     """Stream generation progress via SSE with real workflow updates."""
     from .workflow.graph import run_newsletter_generation_streaming
@@ -80,6 +81,7 @@ async def generate_newsletter_stream(
         async for event in run_newsletter_generation_streaming(
             prompt=prompt,
             max_review_rounds=max_review_rounds,
+            active_players=active_players,
         ):
             event_type = event.get("type", "status")
             
@@ -87,6 +89,7 @@ async def generate_newsletter_stream(
                 yield sse_event("status", {
                     "step": event.get("step", "unknown"),
                     "message": event.get("message", "Processing..."),
+                    "status": event.get("status", "start"),
                 })
             elif event_type == "complete":
                 yield sse_event("complete", {
@@ -155,7 +158,11 @@ async def generate_newsletter_streaming(request: GenerateRequest):
     Generate a newsletter with SSE streaming progress updates.
     """
     return StreamingResponse(
-        generate_newsletter_stream(request.prompt, request.max_review_rounds),
+        generate_newsletter_stream(
+            request.prompt, 
+            request.max_review_rounds,
+            request.active_players
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

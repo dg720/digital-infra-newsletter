@@ -14,6 +14,7 @@ export interface TimeWindow {
 export interface GenerateRequest {
   prompt: string;
   max_review_rounds?: number;
+  active_players?: { [vertical: string]: string[] };
 }
 
 export interface GenerateResponse {

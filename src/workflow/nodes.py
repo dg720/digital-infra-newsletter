@@ -22,12 +22,17 @@ async def manager_init_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     prompt = state.get("prompt", "")
     max_review_rounds = state.get("max_review_rounds", 2)
+    active_players = state.get("active_players", None)
     
     # Parse input
     parsed_input = parse_natural_language_input(prompt)
     
     # Create initial state
     newsletter_state = create_initial_state(prompt, parsed_input, max_review_rounds)
+    
+    # If active_players provided, override comps
+    if active_players:
+        newsletter_state.comps = active_players
     
     return {"newsletter_state": newsletter_state.model_dump()}
 

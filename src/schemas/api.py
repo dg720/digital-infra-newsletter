@@ -18,6 +18,10 @@ class GenerateRequest(BaseModel):
         le=5,
         description="Maximum number of review iterations"
     )
+    active_players: Optional[Dict[str, list]] = Field(
+        default=None,
+        description="Optional map of vertical to list of active player names"
+    )
 
 
 class GenerateResponse(BaseModel):

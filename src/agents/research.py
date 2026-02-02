@@ -1,6 +1,7 @@
 """Research agents - vertical specialists that gather evidence and draft sections."""
 
 from typing import List, Optional
+import asyncio
 import json
 
 from langchain_openai import ChatOpenAI
@@ -82,8 +83,14 @@ def generate_search_queries(
         queries.append(query)
     
     # Add major player queries
-    players = MAJOR_PLAYERS.get(vertical, [])
-    for player in players[:5]:  # Top 5 players
+    if state.comps and vertical.value in state.comps:
+        players = state.comps[vertical.value]
+    else:
+        players = MAJOR_PLAYERS.get(vertical, [])
+        # Default behavior: limit to top 5 if using default list
+        players = players[:5]
+        
+    for player in players:
         query = f"{player} news"
         if state.region_focus:
             query = f"{query} {state.region_focus}"
@@ -119,34 +126,57 @@ async def research_vertical(
     call_count = 0
     max_calls = state.evidence_budgets.get(section_id, 12)
     
+    # 1. Parallelize Search Queries
+    # -----------------------------
+    # Trim queries to budget if needed (keeping some buffer for fetching)
+    search_budget = max(1, max_calls - 3) # Reserve ~3 calls for article fetching
+    if len(queries) > search_budget:
+        queries = queries[:search_budget]
+    
+    loop = asyncio.get_running_loop()
+    search_tasks = []
+    
     for query in queries:
-        if call_count >= max_calls:
-            break
-        
-        # Execute web search
-        results = web_search(
-            query=query,
-            max_results=5,
-            time_window_days=time_window_days,
+        search_tasks.append(
+            loop.run_in_executor(None, web_search, query, 5, time_window_days)
         )
-        call_count += 1
         
-        for item in results:
-            evidence_pack.add_item(item)
-    
-    # Optionally fetch full articles for top results
+    if search_tasks:
+        search_results_list = await asyncio.gather(*search_tasks)
+        call_count += len(search_tasks)
+        
+        for results in search_results_list:
+            for item in results:
+                evidence_pack.add_item(item)
+
+    # 2. Parallelize Article Fetching
+    # -------------------------------
     urls_to_fetch = []
-    for item in evidence_pack.items[:3]:  # Top 3 most relevant
-        if item.url and call_count < max_calls:
-            urls_to_fetch.append(item.url)
+    remaining_budget = max_calls - call_count
     
-    for url in urls_to_fetch:
-        if call_count >= max_calls:
-            break
-        fetched = fetch_article(url)
-        if fetched:
-            evidence_pack.add_item(fetched)
-            call_count += 1
+    if remaining_budget > 0:
+        # Prioritize items that have a URL and aren't already full text
+        candidates = [item for item in evidence_pack.items if item.url and not item.text]
+        # Sort by relevance or just take top ones (evidence_pack already likely has them in order)
+        
+        for item in candidates[:3]:  # Limit to top 3 articles max
+            urls_to_fetch.append(item.url)
+            
+        if len(urls_to_fetch) > remaining_budget:
+            urls_to_fetch = urls_to_fetch[:remaining_budget]
+            
+        if urls_to_fetch:
+            fetch_tasks = [
+                loop.run_in_executor(None, fetch_article, url) 
+                for url in urls_to_fetch
+            ]
+            
+            fetched_items = await asyncio.gather(*fetch_tasks)
+            
+            for item in fetched_items:
+                if item:
+                    evidence_pack.add_item(item)
+                    call_count += 1
     
     # Now draft the section using LLM
     draft = await _draft_section(vertical, state, evidence_pack)

@@ -138,6 +138,7 @@ async def run_newsletter_generation(
 async def run_newsletter_generation_streaming(
     prompt: str,
     max_review_rounds: int = 2,
+    active_players: dict = None,
 ):
     """
     Run the newsletter generation workflow with streaming progress updates.
@@ -165,11 +166,13 @@ async def run_newsletter_generation_streaming(
     graph = create_newsletter_graph()
     compiled = graph.compile()
     
-    # Initial state
+    # Initial state - include active_players if provided
     initial_state: WorkflowState = {
         "prompt": prompt,
         "max_review_rounds": max_review_rounds,
     }
+    if active_players:
+        initial_state["active_players"] = active_players
     
     final_state = None
     seen_nodes = set()

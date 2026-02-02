@@ -15,6 +15,7 @@ import {
 import { ChevronDown, Loader2, Sparkles, AlertCircle, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiClient } from "@/lib/api"
+import { getActivePlayers } from "@/components/settings-modal"
 
 interface GenerationViewProps {
   onBack: () => void
@@ -142,8 +143,9 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       const fullPrompt = buildPrompt()
       
       // Try streaming first, fall back to regular if not available
+      const activePlayers = getActivePlayers()
       const response = await apiClient.generateNewsletterStreaming(
-        { prompt: fullPrompt, max_review_rounds: 2 },
+        { prompt: fullPrompt, max_review_rounds: 2, active_players: activePlayers },
         handleStatusUpdate,
       )
 
