@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,12 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Calendar, Building2, Cable, Radio, Plus, Loader2 } from "lucide-react"
-import { fetchNewsletterList, type NewsletterListItem } from "@/lib/api"
+import { Calendar, Building2, Cable, Radio, Plus, Loader2, RefreshCw } from "lucide-react"
+import type { NewsletterListItem } from "@/lib/api"
 
 interface DashboardViewProps {
   onOpenNewsletter: (id: string) => void
   onStartGeneration: () => void
+  newsletters: NewsletterListItem[]
+  isLoading: boolean
+  error: string | null
+  onRefresh: () => void
 }
 
 const verticalIcons = {
@@ -25,29 +29,16 @@ const verticalIcons = {
   "Towers & Wireless": Radio,
 }
 
-export function DashboardView({ onOpenNewsletter, onStartGeneration }: DashboardViewProps) {
+export function DashboardView({ 
+  onOpenNewsletter, 
+  onStartGeneration,
+  newsletters,
+  isLoading,
+  error,
+  onRefresh, 
+}: DashboardViewProps) {
   const [sortBy, setSortBy] = useState("newest")
   const [filterRegion, setFilterRegion] = useState("all")
-  const [newsletters, setNewsletters] = useState<NewsletterListItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadNewsletters()
-  }, [])
-
-  const loadNewsletters = async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const data = await fetchNewsletterList()
-      setNewsletters(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load newsletters')
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const filteredNewsletters = newsletters
     .filter(n => filterRegion === "all" || n.regions.includes(filterRegion))
@@ -56,7 +47,7 @@ export function DashboardView({ onOpenNewsletter, onStartGeneration }: Dashboard
       return new Date(a.date).getTime() - new Date(b.date).getTime()
     })
 
-  if (isLoading) {
+  if (isLoading && newsletters.length === 0) {
     return (
       <div className="container mx-auto max-w-4xl px-4 py-8">
         <div className="flex min-h-[40vh] items-center justify-center">
@@ -72,13 +63,35 @@ export function DashboardView({ onOpenNewsletter, onStartGeneration }: Dashboard
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
       <div className="mb-8 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Newsletter Library
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Newsletter Library
+          </h1>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="h-8 w-8"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
         <p className="text-muted-foreground">
           Browse and edit your generated newsletters
         </p>
       </div>
+
+      {error && (
+        <Card className="mb-6 border-destructive/50 bg-destructive/10">
+          <CardContent className="flex items-center justify-between py-4">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button variant="outline" size="sm" onClick={onRefresh}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -92,7 +105,7 @@ export function DashboardView({ onOpenNewsletter, onStartGeneration }: Dashboard
             </SelectContent>
           </Select>
           <Select value={filterRegion} onValueChange={setFilterRegion}>
-            <SelectTrigger className="w-32 bg-card">
+            <SelectTrigger className="w-36 bg-card">
               <SelectValue placeholder="Region" />
             </SelectTrigger>
             <SelectContent>
@@ -101,57 +114,26 @@ export function DashboardView({ onOpenNewsletter, onStartGeneration }: Dashboard
               <SelectItem value="EU">EU</SelectItem>
               <SelectItem value="US">US</SelectItem>
               <SelectItem value="APAC">APAC</SelectItem>
-              <SelectItem value="Global">Global</SelectItem>
             </SelectContent>
           </Select>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={loadNewsletters}
-            className="gap-2"
-          >
-            Refresh
-          </Button>
         </div>
-        <Button
-          variant="outline"
-          onClick={onStartGeneration}
-          className="gap-2 sm:hidden bg-transparent"
-        >
+        <Button onClick={onStartGeneration} className="gap-2">
           <Plus className="h-4 w-4" />
           New Newsletter
         </Button>
       </div>
 
-      {error && (
-        <Card className="mb-6 border-destructive/50 bg-destructive/10">
-          <CardContent className="py-4 text-center">
-            <p className="text-sm text-destructive">{error}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadNewsletters}
-              className="mt-2"
-            >
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
       {filteredNewsletters.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Calendar className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <h3 className="mb-1 font-medium text-foreground">No newsletters yet</h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Generate your first newsletter to get started
+            <p className="mb-4 text-muted-foreground">
+              {newsletters.length === 0 
+                ? "No newsletters generated yet. Create your first one!"
+                : "No newsletters match your filter criteria."}
             </p>
-            <Button onClick={onStartGeneration} className="gap-2">
+            <Button onClick={onStartGeneration} variant="secondary" className="gap-2">
               <Plus className="h-4 w-4" />
-              Create Newsletter
+              Generate Newsletter
             </Button>
           </CardContent>
         </Card>

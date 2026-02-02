@@ -19,6 +19,8 @@ import { apiClient } from "@/lib/api"
 interface GenerationViewProps {
   onBack: () => void
   onNewsletterGenerated: (id: string) => void
+  onGenerationStart?: () => void
+  isVisible?: boolean
 }
 
 interface StatusStep {
@@ -37,7 +39,7 @@ const initialSteps: StatusStep[] = [
   { id: 'assemble', label: 'Assembling newsletter', status: 'pending' },
 ]
 
-export function GenerationView({ onBack, onNewsletterGenerated }: GenerationViewProps) {
+export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStart, isVisible = true }: GenerationViewProps) {
   const [prompt, setPrompt] = useState("")
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -132,6 +134,7 @@ export function GenerationView({ onBack, onNewsletterGenerated }: GenerationView
     setIsGenerating(true)
     setError(null)
     setSteps(initialSteps.map(s => ({ ...s, status: 'pending' as const })))
+    onGenerationStart?.()
 
     try {
       const fullPrompt = buildPrompt()
