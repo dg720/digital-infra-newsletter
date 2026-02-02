@@ -137,7 +137,7 @@ class ApiClient {
    */
   async generateNewsletterStreaming(
     request: GenerateRequest,
-    onStatus?: (step: string, message: string) => void,
+    onStatus?: (step: string, message: string, status: 'start' | 'complete') => void,
   ): Promise<GenerateResponse> {
     const response = await fetch(`${this.baseUrl}/newsletter/generate/stream`, {
       method: 'POST',
@@ -177,7 +177,7 @@ class ApiClient {
           const data = JSON.parse(line.slice(6));
           
           if (data.step && data.message && onStatus) {
-            onStatus(data.step, data.message);
+            onStatus(data.step, data.message, data.status || 'start');
           }
           
           if (data.newsletter_id) {

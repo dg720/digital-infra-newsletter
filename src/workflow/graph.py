@@ -173,6 +173,7 @@ async def run_newsletter_generation_streaming(
     
     final_state = None
     seen_nodes = set()
+    completed_nodes = set()
     
     try:
         # Use astream_events to get real-time updates
@@ -185,11 +186,16 @@ async def run_newsletter_generation_streaming(
                 if node_name in node_display and node_name not in seen_nodes:
                     seen_nodes.add(node_name)
                     step, message = node_display[node_name]
-                    yield {"type": "status", "step": step, "message": message}
+                    yield {"type": "status", "step": step, "message": message, "status": "start"}
             
-            # Capture final state from chain end
+            # Track node completions
             if event_kind == "on_chain_end":
                 node_name = event.get("name", "")
+                if node_name in node_display and node_name not in completed_nodes:
+                    completed_nodes.add(node_name)
+                    step, message = node_display[node_name]
+                    yield {"type": "status", "step": step, "message": f"Completed: {message}", "status": "complete"}
+                
                 if node_name == "LangGraph":
                     # This is the final output
                     final_state = event.get("data", {}).get("output", {})
@@ -213,3 +219,4 @@ async def run_newsletter_generation_streaming(
             
     except Exception as e:
         yield {"type": "error", "message": str(e)}
+

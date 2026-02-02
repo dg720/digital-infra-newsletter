@@ -105,7 +105,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
     }))
   }
 
-  const handleStatusUpdate = (step: string, message: string) => {
+  const handleStatusUpdate = (step: string, message: string, status: 'start' | 'complete') => {
     // Map backend steps to frontend steps
     const stepMap: Record<string, string> = {
       'manager': 'manager',
@@ -118,7 +118,9 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
     }
     
     const frontendStep = stepMap[step] || step
-    updateStep(frontendStep, 'active')
+    // Map backend status to frontend status
+    const frontendStatus = status === 'complete' ? 'complete' : 'active'
+    updateStep(frontendStep, frontendStatus)
   }
 
   const handleGenerate = async () => {
