@@ -85,12 +85,18 @@ export function GenerationView({ onBack, onNewsletterGenerated }: GenerationView
   }
 
   const updateStep = (stepId: string, status: 'active' | 'complete') => {
+    const parallelSteps = ['research_dc', 'research_cf', 'research_tw']
+    
     setSteps(prev => prev.map(step => {
       if (step.id === stepId) {
         return { ...step, status }
       }
-      // Mark previous steps as complete if we're activating a new one
-      if (status === 'active' && step.status === 'active' && step.id !== stepId) {
+      // Research steps can run in parallel - don't mark others complete
+      if (status === 'active' && parallelSteps.includes(stepId) && parallelSteps.includes(step.id)) {
+        return step // Keep other research steps as-is
+      }
+      // For non-research steps, mark previous active step complete
+      if (status === 'active' && step.status === 'active' && step.id !== stepId && !parallelSteps.includes(step.id)) {
         return { ...step, status: 'complete' }
       }
       return step

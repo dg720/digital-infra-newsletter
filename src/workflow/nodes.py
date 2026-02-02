@@ -159,6 +159,7 @@ def assemble_newsletter_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     newsletter_state = NewsletterState(**state["newsletter_state"])
     drafts = state.get("drafts", {})
+    evidence_packs = state.get("evidence_packs", {})
     
     # Build newsletter markdown
     lines = [
@@ -175,11 +176,16 @@ def assemble_newsletter_node(state: Dict[str, Any]) -> Dict[str, Any]:
         section_id = vertical.value
         if section_id in drafts:
             draft = SectionDraft(**drafts[section_id])
+            # Get evidence pack for this section if available
+            evidence_pack = None
+            if section_id in evidence_packs:
+                evidence_pack = EvidencePack(**evidence_packs[section_id])
+            
             display_name = VERTICAL_DISPLAY_NAMES.get(vertical, section_id)
             
             lines.append(f"## {display_name}")
             lines.append("")
-            lines.append(draft.to_markdown())
+            lines.append(draft.to_markdown(evidence_pack))
             lines.append("")
             lines.append("---")
             lines.append("")

@@ -245,13 +245,18 @@ async def update_section(
         if existing_md:
             # Regenerate full newsletter with updated section
             all_drafts = {}
+            all_evidence = {}
             for section_id in section_id_map.keys():
                 section_data = store.read_artifact(newsletter_id, f"sections/{section_id}.json")
                 if section_data:
                     all_drafts[section_id] = SectionDraft(**section_data)
+                evidence_data = store.read_artifact(newsletter_id, f"evidence/{section_id}_pack.json")
+                if evidence_data:
+                    all_evidence[section_id] = EvidencePack(**evidence_data)
             
-            # Replace the updated section
+            # Replace the updated section and evidence
             all_drafts[request.section_id] = final_draft
+            all_evidence[request.section_id] = evidence_pack
             
             # Reassemble newsletter
             from .constants import VERTICAL_DISPLAY_NAMES
@@ -268,9 +273,10 @@ async def update_section(
             for sid, v in section_id_map.items():
                 if sid in all_drafts:
                     display_name = VERTICAL_DISPLAY_NAMES.get(v, sid)
+                    ep = all_evidence.get(sid)
                     lines.append(f"## {display_name}")
                     lines.append("")
-                    lines.append(all_drafts[sid].to_markdown())
+                    lines.append(all_drafts[sid].to_markdown(ep))
                     lines.append("")
                     lines.append("---")
                     lines.append("")

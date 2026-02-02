@@ -39,20 +39,47 @@ class SectionDraft(BaseModel):
         description="Uncertainties or missing context"
     )
     
-    def to_markdown(self) -> str:
-        """Convert section to markdown format."""
-        # Format evidence citations for big picture
-        bp_citations = ", ".join(self.big_picture_evidence_ids)
+    def to_markdown(self, evidence_pack: "EvidencePack" = None) -> str:
+        """Convert section to markdown format with numbered citations.
+        
+        If evidence_pack is provided, citations link to sources.
+        Otherwise, uses simple numbered format.
+        """
+        # Collect all unique evidence IDs in order of appearance
+        all_ids = list(self.big_picture_evidence_ids)
+        for b in self.bullets:
+            all_ids.extend(b.evidence_ids)
+        unique_ids = list(dict.fromkeys(all_ids))  # Preserve order, remove dupes
+        id_to_num = {eid: i + 1 for i, eid in enumerate(unique_ids)}
+        
+        # Format big picture with [1][2] style citations
+        bp_nums = [str(id_to_num[eid]) for eid in self.big_picture_evidence_ids if eid in id_to_num]
+        bp_cite = "".join(f"[{n}]" for n in bp_nums[:3])  # Limit to 3 citations
         
         lines = [
-            self.big_picture + f" [evidence: {bp_citations}]",
+            self.big_picture + (f" {bp_cite}" if bp_cite else ""),
             "",
             "**Major player updates**",
         ]
         
         for bullet in self.bullets:
-            citations = ", ".join(bullet.evidence_ids)
-            lines.append(f"- {bullet.text} [evidence: {citations}]")
+            nums = [str(id_to_num[eid]) for eid in bullet.evidence_ids if eid in id_to_num]
+            cite = "".join(f"[{n}]" for n in nums[:2])  # Limit to 2 per bullet
+            lines.append(f"- {bullet.text}" + (f" {cite}" if cite else ""))
+        
+        # Add sources footnote section if evidence pack provided
+        if evidence_pack:
+            lines.append("")
+            lines.append("---")
+            lines.append("**Sources**")
+            for eid in unique_ids:
+                num = id_to_num[eid]
+                item = evidence_pack.get_item_by_id(eid)
+                if item and item.url:
+                    title = item.title or item.url
+                    lines.append(f"[{num}] [{title}]({item.url})")
+                elif item and item.title:
+                    lines.append(f"[{num}] {item.title}")
         
         return "\n".join(lines)
 
