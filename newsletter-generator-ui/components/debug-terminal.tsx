@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
-import { ChevronDown, ChevronRight, Terminal, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Terminal, Trash2, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -23,6 +23,7 @@ export function DebugTerminal({ events, onClear, isGenerating = false }: DebugTe
   const [isOpen, setIsOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  const [copied, setCopied] = useState(false)
 
   // Auto-scroll to bottom when new events arrive
   useEffect(() => {
@@ -64,7 +65,7 @@ export function DebugTerminal({ events, onClear, isGenerating = false }: DebugTe
       case 'llm':
         return 'LLM'
       case 'llm_stream':
-        return ''
+        return 'LLM'
       default:
         return 'INFO'
     }
@@ -77,6 +78,39 @@ export function DebugTerminal({ events, onClear, isGenerating = false }: DebugTe
       minute: '2-digit', 
       second: '2-digit' 
     })
+  }
+
+  const buildCopyText = () => {
+    return events.map((event) => {
+      const time = formatTime(event.timestamp)
+      const badge = getCategoryBadge(event.category)
+      const prefix = badge ? `[${time}] ${badge}` : `[${time}]`
+      return `${prefix} ${event.content}`
+    }).join('\n')
+  }
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const text = buildCopyText()
+    if (!text) return
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
   }
 
   return (
@@ -102,19 +136,32 @@ export function DebugTerminal({ events, onClear, isGenerating = false }: DebugTe
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isOpen && onClear && events.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onClear()
-              }}
-              className="h-6 px-2 text-xs"
-            >
-              <Trash2 className="h-3 w-3 mr-1" />
-              Clear
-            </Button>
+          {isOpen && events.length > 0 && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopy}
+                className="h-6 px-2 text-xs"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                {copied ? "Copied" : "Copy"}
+              </Button>
+              {onClear && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onClear()
+                  }}
+                  className="h-6 px-2 text-xs"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Clear
+                </Button>
+              )}
+            </>
           )}
           {isOpen ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />

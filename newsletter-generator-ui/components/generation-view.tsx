@@ -259,38 +259,28 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       )}
 
       {/* Newsletter Settings */}
-      <div className="mb-10 space-y-8">
-        <div>
-          <p className="text-sm font-medium text-foreground">Newsletter Settings</p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
-            Time window, sector coverage, and geographies drive the run.
-          </p>
-        </div>
-
+      <div className="mb-10 space-y-6">
         {/* Time Window */}
         <div>
           <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-            Context
+            Time Window
           </p>
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-foreground/90">Time Window</Label>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
-                disabled={isGenerating}
-              />
-              <span className="text-sm text-muted-foreground/60">to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
-                disabled={isGenerating}
-              />
-            </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
+              disabled={isGenerating}
+            />
+            <span className="text-sm text-muted-foreground/60">to</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
+              disabled={isGenerating}
+            />
           </div>
         </div>
 

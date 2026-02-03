@@ -17,7 +17,7 @@ export function Header({ view, onBackToDashboard, onStartGeneration }: HeaderPro
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm no-print">
         <div className="container mx-auto max-w-4xl px-4">
           <div className="flex h-14 items-center justify-between">
             <div className="flex items-center gap-3">

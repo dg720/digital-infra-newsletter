@@ -1,0 +1,5 @@
+flowchart TB
+  start([__start__]) --> summarizer([summarizer])
+  summarizer -- True --> reviewer([reviewer])
+  reviewer --> summarizer
+  summarizer -- False --> end([__end__])

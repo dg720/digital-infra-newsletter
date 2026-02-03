@@ -19,7 +19,8 @@ import {
   User,
   Bot,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Download
 } from "lucide-react"
 import { fetchNewsletterDetail, apiClient } from "@/lib/api"
 import type { NewsletterDetail, SectionForUI } from "@/lib/api"
@@ -182,6 +183,12 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSubmitEdit()
+    }
+  }
+
+  const handleExportPdf = () => {
+    if (typeof window !== "undefined") {
+      window.print()
     }
   }
 
@@ -369,8 +376,8 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
     <div className="pb-48">
       {/* Newsletter Header */}
       <div className="border-b border-border bg-card/50">
-        <div className="container mx-auto max-w-3xl px-4 py-10">
-          <h1 className="mb-4 text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+        <div className="container mx-auto max-w-3xl px-4 py-10 print-container">
+          <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             {newsletter.title}
           </h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
@@ -407,11 +414,22 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
             <span className="text-border">|</span>
             <span>{newsletter.regions.join(", ")}</span>
           </div>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPdf}
+              className="no-print gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export PDF
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Newsletter Content */}
-      <article className="container mx-auto max-w-3xl px-4 py-10">
+      <article className="container mx-auto max-w-3xl px-4 py-10 print-container">
         <div className="space-y-12">
           {(Object.keys(newsletter.sections) as SectionKey[]).map((key) =>
             renderSection(key, newsletter.sections[key])
@@ -420,7 +438,7 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
       </article>
 
       {/* Edit Chat Panel */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 shadow-lg backdrop-blur-sm">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 shadow-lg backdrop-blur-sm no-print">
         <div className="container mx-auto max-w-3xl px-4">
           {/* Status Ribbon */}
           {isUpdating && statusMessage && (
