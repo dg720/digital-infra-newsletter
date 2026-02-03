@@ -1,0 +1,26 @@
+{
+  "name": "digital-infra-newsletter",
+  "version": "1.0.0",
+  "description": "Automated weekly newsletter generation for digital infrastructure using a LangGraph multi-agent workflow.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dg720/digital-infra-newsletter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/dg720/digital-infra-newsletter/issues"
+  },
+  "homepage": "https://github.com/dg720/digital-infra-newsletter#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.58.1",
+    "@types/node": "^25.2.0"
+  }
+}
