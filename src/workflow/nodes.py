@@ -23,16 +23,34 @@ async def manager_init_node(state: Dict[str, Any]) -> Dict[str, Any]:
     prompt = state.get("prompt", "")
     max_review_rounds = state.get("max_review_rounds", 2)
     active_players = state.get("active_players", None)
+    requested_verticals = state.get("verticals", None)
     
     # Parse input
     parsed_input = parse_natural_language_input(prompt)
     
+    # Override verticals if explicitly provided
+    if requested_verticals:
+        parsed_verticals = []
+        for v in requested_verticals:
+            try:
+                parsed_verticals.append(Vertical(v))
+            except ValueError:
+                continue
+        if parsed_verticals:
+            parsed_input.verticals = parsed_verticals
+
     # Create initial state
     newsletter_state = create_initial_state(prompt, parsed_input, max_review_rounds)
     
     # If active_players provided, override comps
     if active_players:
-        newsletter_state.comps = active_players
+        if requested_verticals:
+            allowed = {v.value for v in parsed_input.verticals}
+            filtered_players = {k: v for k, v in active_players.items() if k in allowed}
+            newsletter_state.comps = filtered_players
+        else:
+            newsletter_state.comps = active_players
+        newsletter_state.active_players_provided = True
     
     return {"newsletter_state": newsletter_state.model_dump()}
 
@@ -44,6 +62,9 @@ async def research_node(state: Dict[str, Any], vertical: Vertical) -> Dict[str, 
     Gathers evidence and drafts a section.
     """
     newsletter_state = NewsletterState(**state["newsletter_state"])
+
+    if vertical not in newsletter_state.verticals:
+        return {}
     
     # Research the vertical
     evidence_pack, draft = await research_vertical(vertical, newsletter_state)

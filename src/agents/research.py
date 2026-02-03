@@ -12,6 +12,7 @@ from ..schemas.state import NewsletterState
 from ..schemas.evidence import EvidenceItem, EvidencePack
 from ..schemas.sections import SectionDraft, Bullet
 from ..constants import Vertical, MAJOR_PLAYERS, SECTOR_KEYWORDS, VERTICAL_DISPLAY_NAMES
+from ..utils.citations import extract_evidence_ids, normalize_evidence_ids, strip_evidence_markers
 from ..tools import web_search, fetch_article
 
 
@@ -87,6 +88,8 @@ def generate_search_queries(
     # Add major player queries
     if state.comps and vertical.value in state.comps:
         players = state.comps[vertical.value]
+        if not state.active_players_provided:
+            players = players[:5]
     else:
         players = MAJOR_PLAYERS.get(vertical, [])
         # Default behavior: limit to top 5 if using default list
@@ -209,8 +212,11 @@ async def _draft_section(
         active_players = MAJOR_PLAYERS.get(vertical, [])
         print(f"[RESEARCH] Using MAJOR_PLAYERS for {section_id}: {active_players[:5]}")
     
-    # Bullet count matches the number of active players (max 5)
-    bullet_count = min(len(active_players), 5) if active_players else 5
+    # Bullet count matches active players only when explicitly provided
+    if state.active_players_provided:
+        bullet_count = len(active_players)
+    else:
+        bullet_count = min(len(active_players), 5)
     print(f"[RESEARCH] {section_id}: bullet_count={bullet_count}, active_players_count={len(active_players)}")
     
     # Build prompt using active players, not all players
@@ -268,20 +274,54 @@ async def _draft_section(
             risk_flags=["LLM response parsing failed"],
         )
     
+    available_evidence_ids = evidence_pack.get_evidence_ids()
+    available_set = set(available_evidence_ids)
+    fallback_idx = 0
+    auto_assigned = False
+
+    def fallback_ids(count: int = 1) -> list[str]:
+        nonlocal fallback_idx, auto_assigned
+        if not available_evidence_ids:
+            return []
+        auto_assigned = True
+        picked = []
+        for _ in range(count):
+            picked.append(available_evidence_ids[fallback_idx % len(available_evidence_ids)])
+            fallback_idx += 1
+        return picked
+
+    raw_big_picture = parsed.get("big_picture", "")
+    big_picture_ids = normalize_evidence_ids(parsed.get("big_picture_evidence_ids", []))
+    if not big_picture_ids:
+        big_picture_ids = extract_evidence_ids(raw_big_picture)
+    big_picture_ids = [eid for eid in big_picture_ids if eid in available_set]
+    if not big_picture_ids and available_evidence_ids:
+        big_picture_ids = fallback_ids(count=min(2, len(available_evidence_ids)))
+
     # Build bullets - limit to bullet_count
     bullets = []
-    for b in parsed.get("bullets", [])[:bullet_count]:
+    for idx, b in enumerate(parsed.get("bullets", [])[:bullet_count]):
+        raw_text = b.get("text", "")
+        evidence_ids = normalize_evidence_ids(b.get("evidence_ids", []))
+        if not evidence_ids:
+            evidence_ids = extract_evidence_ids(raw_text)
+        evidence_ids = [eid for eid in evidence_ids if eid in available_set]
+        if not evidence_ids and available_evidence_ids:
+            evidence_ids = fallback_ids()
         bullets.append(Bullet(
-            text=b.get("text", ""),
-            evidence_ids=b.get("evidence_ids", []),
+            text=strip_evidence_markers(raw_text),
+            evidence_ids=evidence_ids,
             player_referenced=b.get("player_referenced"),
         ))
     
     return SectionDraft(
         section_id=vertical.value,
-        big_picture=parsed.get("big_picture", ""),
-        big_picture_evidence_ids=parsed.get("big_picture_evidence_ids", []),
+        big_picture=strip_evidence_markers(raw_big_picture),
+        big_picture_evidence_ids=big_picture_ids,
         bullets=bullets,
-        risk_flags=parsed.get("risk_flags", []),
+        risk_flags=(
+            parsed.get("risk_flags", [])
+            + (["Auto-assigned evidence IDs due to missing citations."] if auto_assigned else [])
+        ),
     )
 

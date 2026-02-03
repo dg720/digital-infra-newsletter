@@ -72,6 +72,7 @@ async def generate_newsletter_stream(
     prompt: str,
     max_review_rounds: int = 2,
     active_players: dict = None,
+    verticals: list[str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream generation progress via SSE with real workflow updates."""
     from .workflow.graph import run_newsletter_generation_streaming
@@ -82,6 +83,7 @@ async def generate_newsletter_stream(
             prompt=prompt,
             max_review_rounds=max_review_rounds,
             active_players=active_players,
+            verticals=verticals,
         ):
             event_type = event.get("type", "status")
             
@@ -138,6 +140,8 @@ async def generate_newsletter(request: GenerateRequest) -> GenerateResponse:
         result = await run_newsletter_generation(
             prompt=request.prompt,
             max_review_rounds=request.max_review_rounds,
+            active_players=request.active_players,
+            verticals=request.verticals,
         )
         
         # Extract newsletter ID and paths
@@ -167,7 +171,8 @@ async def generate_newsletter_streaming(request: GenerateRequest):
         generate_newsletter_stream(
             request.prompt, 
             request.max_review_rounds,
-            request.active_players
+            request.active_players,
+            request.verticals,
         ),
         media_type="text/event-stream",
         headers={

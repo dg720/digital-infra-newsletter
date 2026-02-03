@@ -12,6 +12,10 @@ class GenerateRequest(BaseModel):
     prompt: str = Field(
         description="Natural language describing timeframe, region focus, voice, etc."
     )
+    verticals: Optional[list[str]] = Field(
+        default=None,
+        description="Optional list of vertical IDs to include (e.g. data_centers)"
+    )
     max_review_rounds: int = Field(
         default=2,
         ge=1,

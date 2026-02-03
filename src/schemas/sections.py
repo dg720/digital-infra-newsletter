@@ -31,8 +31,7 @@ class SectionDraft(BaseModel):
     )
     bullets: List[Bullet] = Field(
         default_factory=list,
-        max_length=5,
-        description="Up to 5 one-line bullets"
+        description="One-line bullets keyed to major players"
     )
     risk_flags: List[str] = Field(
         default_factory=list,

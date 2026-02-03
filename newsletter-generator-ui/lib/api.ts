@@ -13,6 +13,7 @@ export interface TimeWindow {
 
 export interface GenerateRequest {
   prompt: string;
+  verticals?: string[];
   max_review_rounds?: number;
   active_players?: { [vertical: string]: string[] };
 }
@@ -344,10 +345,26 @@ export function convertToUIFormat(
       return { bigPicture: '', bullets: [], evidence: [] };
     }
 
+    const evidenceIdPattern = /ev_[a-f0-9]{8}/gi;
+    const extractEvidenceIds = (text: string): string[] => {
+      const matches = text.match(evidenceIdPattern) || [];
+      return [...new Set(matches)];
+    };
+
+    const bigPictureIds = (section.big_picture_evidence_ids && section.big_picture_evidence_ids.length > 0)
+      ? section.big_picture_evidence_ids
+      : extractEvidenceIds(section.big_picture || '');
+
+    const bulletEvidenceIds = section.bullets.map((b) => (
+      (b.evidence_ids && b.evidence_ids.length > 0)
+        ? b.evidence_ids
+        : extractEvidenceIds(b.text || '')
+    ));
+
     // Collect all referenced evidence IDs in order of appearance
-    const allReferencedIds: string[] = [...(section.big_picture_evidence_ids || [])];
-    for (const b of section.bullets) {
-      allReferencedIds.push(...(b.evidence_ids || []));
+    const allReferencedIds: string[] = [...bigPictureIds];
+    for (const ids of bulletEvidenceIds) {
+      allReferencedIds.push(...ids);
     }
     // Remove duplicates while preserving order
     const uniqueIds = [...new Set(allReferencedIds)];
@@ -359,14 +376,19 @@ export function convertToUIFormat(
     // Helper to strip evidence ID patterns like (ev_xxx) from text
     const stripEvidenceIds = (text: string): string => {
       return text
-        .replace(/\s*\(ev_[a-f0-9]+\)/gi, '')  // Remove (ev_xxx) patterns
-        .replace(/\s*ev_[a-f0-9]+/gi, '')      // Remove standalone ev_xxx
+        .replace(/\s*\((?:[^)]*ev_[a-f0-9]{8}[^)]*)\)/gi, '')  // Remove parentheses with evidence IDs
+        .replace(/\s*\[(?:[^\]]*ev_[a-f0-9]{8}[^\]]*)\]/gi, '') // Remove brackets with evidence IDs
+        .replace(/\s*ev_[a-f0-9]{8}/gi, '')                    // Remove standalone ev_xxx
+        .replace(/\(\s*\)/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(' ,', ',')
+        .replace(' .', '.')
         .trim();
     };
 
     // Build big picture with citations appended
     const cleanBigPicture = stripEvidenceIds(section.big_picture);
-    const bpCiteNums = (section.big_picture_evidence_ids || [])
+    const bpCiteNums = bigPictureIds
       .slice(0, 3)
       .map(id => idToNum[id])
       .filter(Boolean);
@@ -374,9 +396,9 @@ export function convertToUIFormat(
       (bpCiteNums.length > 0 ? ' ' + bpCiteNums.map(n => `[${n}]`).join('') : '');
 
     // Build bullets with citations appended to text
-    const bulletsWithCites = section.bullets.map((b) => {
+    const bulletsWithCites = section.bullets.map((b, index) => {
       const cleanText = stripEvidenceIds(b.text);
-      const citeNums = (b.evidence_ids || [])
+      const citeNums = (bulletEvidenceIds[index] || [])
         .slice(0, 2)
         .map(id => idToNum[id])
         .filter(Boolean);

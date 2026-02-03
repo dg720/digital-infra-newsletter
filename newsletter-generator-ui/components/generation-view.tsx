@@ -177,9 +177,14 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       // Get settings
       const activePlayers = getActivePlayers()
       const reviewRounds = getReviewRounds()
+      const verticalIds = [
+        ...(verticals.dataCenters ? ["data_centers"] : []),
+        ...(verticals.connectivity ? ["connectivity_fibre"] : []),
+        ...(verticals.towers ? ["towers_wireless"] : []),
+      ]
       
       const response = await apiClient.generateNewsletterStreaming(
-        { prompt: fullPrompt, max_review_rounds: reviewRounds, active_players: activePlayers },
+        { prompt: fullPrompt, max_review_rounds: reviewRounds, active_players: activePlayers, verticals: verticalIds },
         handleStatusUpdate,
         handleDebugEvent,
       )
@@ -198,6 +203,12 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       try {
         const fullPrompt = buildPrompt()
         const reviewRounds = getReviewRounds()
+        const activePlayers = getActivePlayers()
+        const verticalIds = [
+          ...(verticals.dataCenters ? ["data_centers"] : []),
+          ...(verticals.connectivity ? ["connectivity_fibre"] : []),
+          ...(verticals.towers ? ["towers_wireless"] : []),
+        ]
         const filteredSteps = getFilteredSteps(verticals)
         
         // Simulate step progress for non-streaming
@@ -210,6 +221,8 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
         const response = await apiClient.generateNewsletter({
           prompt: fullPrompt,
           max_review_rounds: reviewRounds,
+          active_players: activePlayers,
+          verticals: verticalIds,
         })
 
         toast({

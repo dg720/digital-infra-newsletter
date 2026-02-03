@@ -146,8 +146,8 @@ class TestSectionDraft:
         md = draft.to_markdown()
         
         assert "Big picture text." in md
-        assert "[evidence: ev_001]" in md
-        assert "- Bullet one [evidence: ev_002]" in md
+        assert "[1]" in md
+        assert "- Bullet one [2]" in md
 
 
 class TestReviewScore:

@@ -90,6 +90,10 @@ class NewsletterState(BaseModel):
         default_factory=dict,
         description="Major players per vertical"
     )
+    active_players_provided: bool = Field(
+        default=False,
+        description="Whether active players were explicitly provided in the request"
+    )
     evidence_budgets: Dict[str, int] = Field(
         default_factory=dict,
         description="Tool call budget per vertical"

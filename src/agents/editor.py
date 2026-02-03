@@ -9,6 +9,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from ..config import get_settings
 from ..schemas.state import NewsletterState
 from ..schemas.sections import SectionDraft, Bullet
+from ..utils.citations import normalize_evidence_ids, strip_evidence_markers
 
 
 EDITOR_PROMPT = """You are a newsletter editor performing a final polish pass.
@@ -147,21 +148,32 @@ async def edit_sections(
         if section_id in sections_data:
             edited_data = sections_data[section_id]
             
-            # Build bullets
+            # Build bullets, preserving evidence IDs if the editor drops them
             bullets = []
-            for b in edited_data.get("bullets", []):
+            edited_bullets = edited_data.get("bullets", [])
+            for idx, b in enumerate(edited_bullets):
+                original_bullet = draft.bullets[idx] if idx < len(draft.bullets) else None
+                evidence_ids = normalize_evidence_ids(b.get("evidence_ids", []))
+                if not evidence_ids and original_bullet:
+                    evidence_ids = original_bullet.evidence_ids
+                text_value = b.get("text", original_bullet.text if original_bullet else "")
                 bullets.append(Bullet(
-                    text=b.get("text", ""),
-                    evidence_ids=b.get("evidence_ids", []),
-                    player_referenced=b.get("player_referenced"),
+                    text=strip_evidence_markers(text_value),
+                    evidence_ids=evidence_ids,
+                    player_referenced=b.get(
+                        "player_referenced",
+                        original_bullet.player_referenced if original_bullet else None,
+                    ),
                 ))
             
             edited_drafts[section_id] = SectionDraft(
                 section_id=section_id,
-                big_picture=edited_data.get("big_picture", draft.big_picture),
-                big_picture_evidence_ids=edited_data.get(
-                    "big_picture_evidence_ids",
-                    draft.big_picture_evidence_ids
+                big_picture=strip_evidence_markers(
+                    edited_data.get("big_picture", draft.big_picture)
+                ),
+                big_picture_evidence_ids=(
+                    normalize_evidence_ids(edited_data.get("big_picture_evidence_ids"))
+                    or draft.big_picture_evidence_ids
                 ),
                 bullets=bullets if bullets else draft.bullets,
                 risk_flags=draft.risk_flags,  # Preserve original flags

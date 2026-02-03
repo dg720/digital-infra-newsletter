@@ -27,6 +27,8 @@ class WorkflowState(TypedDict, total=False):
     # Input
     prompt: str
     max_review_rounds: int
+    active_players: Dict[str, List[str]]
+    verticals: List[str]
     
     # Parsed state
     newsletter_state: Dict[str, Any]
@@ -108,6 +110,8 @@ def create_newsletter_graph() -> StateGraph:
 async def run_newsletter_generation(
     prompt: str,
     max_review_rounds: int = 2,
+    active_players: dict | None = None,
+    verticals: list[str] | None = None,
 ) -> Dict[str, Any]:
     """
     Run the full newsletter generation workflow.
@@ -128,6 +132,10 @@ async def run_newsletter_generation(
         "prompt": prompt,
         "max_review_rounds": max_review_rounds,
     }
+    if active_players:
+        initial_state["active_players"] = active_players
+    if verticals:
+        initial_state["verticals"] = verticals
     
     # Run workflow
     final_state = await compiled.ainvoke(initial_state)
@@ -139,6 +147,7 @@ async def run_newsletter_generation_streaming(
     prompt: str,
     max_review_rounds: int = 2,
     active_players: dict = None,
+    verticals: list[str] | None = None,
 ):
     """
     Run the newsletter generation workflow with streaming progress updates.
@@ -175,6 +184,8 @@ async def run_newsletter_generation_streaming(
     }
     if active_players:
         initial_state["active_players"] = active_players
+    if verticals:
+        initial_state["verticals"] = verticals
     
     final_state = None
     seen_nodes = set()
