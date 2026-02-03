@@ -2,20 +2,13 @@
 
 import { useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import { ChevronDown, Loader2, Sparkles, AlertCircle, CheckCircle } from "lucide-react"
+import { Loader2, Sparkles, AlertCircle, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiClient } from "@/lib/api"
-import { getActivePlayers, getReviewRounds } from "@/components/settings-modal"
+import { getActivePlayers, getReviewRounds, getSearchProvider } from "@/components/settings-modal"
 import { DebugTerminal, DebugEvent } from "@/components/debug-terminal"
 
 interface GenerationViewProps {
@@ -32,7 +25,7 @@ interface StatusStep {
 }
 
 const allSteps: StatusStep[] = [
-  { id: 'manager', label: 'Parsing request', status: 'pending' },
+  { id: 'manager', label: 'Initializing run', status: 'pending' },
   { id: 'research_dc', label: 'Researching Data Centers', status: 'pending' },
   { id: 'research_cf', label: 'Researching Connectivity', status: 'pending' },
   { id: 'research_tw', label: 'Researching Towers', status: 'pending' },
@@ -52,8 +45,6 @@ const getFilteredSteps = (selectedVerticals: {dataCenters: boolean, connectivity
 }
 
 export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStart, isVisible = true }: GenerationViewProps) {
-  const [prompt, setPrompt] = useState("")
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [steps, setSteps] = useState<StatusStep[]>(allSteps)
   const [error, setError] = useState<string | null>(null)
@@ -75,30 +66,6 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
   const { toast } = useToast()
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  const buildPrompt = () => {
-    let fullPrompt = prompt.trim()
-
-    if (!fullPrompt.toLowerCase().includes("week") && 
-        !fullPrompt.toLowerCase().includes("day") && 
-        !fullPrompt.toLowerCase().includes("month")) {
-      fullPrompt += ` for the period from ${startDate} to ${endDate}`
-    }
-
-    const selectedVerticals = []
-    if (verticals.dataCenters) selectedVerticals.push("data centres")
-    if (verticals.connectivity) selectedVerticals.push("connectivity and fibre")
-    if (verticals.towers) selectedVerticals.push("towers and wireless")
-    
-    if (selectedVerticals.length < 3 && selectedVerticals.length > 0) {
-      fullPrompt += `. Focus on ${selectedVerticals.join(" and ")}`
-    }
-
-    if (regions.length > 0 && regions.length < 6) {
-      fullPrompt += `. Geographic focus: ${regions.join(", ")}`
-    }
-
-    return fullPrompt
-  }
 
   const updateStep = (stepId: string, status: 'active' | 'complete') => {
     const parallelSteps = ['research_dc', 'research_cf', 'research_tw']
@@ -154,10 +121,11 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
   }, [])
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) {
+    const hasVerticals = verticals.dataCenters || verticals.connectivity || verticals.towers
+    if (!hasVerticals) {
       toast({
         title: "Error",
-        description: "Please enter a description for your newsletter",
+        description: "Select at least one sector to generate a newsletter",
         variant: "destructive",
       })
       return
@@ -172,11 +140,14 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
     onGenerationStart?.()
 
     try {
-      const fullPrompt = buildPrompt()
+      const regionFocus = regions.length > 0 && regions.length < 6
+        ? regions.join(", ")
+        : null
       
       // Get settings
       const activePlayers = getActivePlayers()
       const reviewRounds = getReviewRounds()
+      const searchProvider = getSearchProvider()
       const verticalIds = [
         ...(verticals.dataCenters ? ["data_centers"] : []),
         ...(verticals.connectivity ? ["connectivity_fibre"] : []),
@@ -184,7 +155,14 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       ]
       
       const response = await apiClient.generateNewsletterStreaming(
-        { prompt: fullPrompt, max_review_rounds: reviewRounds, active_players: activePlayers, verticals: verticalIds },
+        { 
+          time_window: { start: startDate, end: endDate },
+          region_focus: regionFocus,
+          max_review_rounds: reviewRounds, 
+          active_players: activePlayers, 
+          verticals: verticalIds,
+          search_provider: searchProvider,
+        },
         handleStatusUpdate,
         handleDebugEvent,
       )
@@ -201,9 +179,12 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
     } catch (err) {
       // Fallback to non-streaming on error
       try {
-        const fullPrompt = buildPrompt()
+        const regionFocus = regions.length > 0 && regions.length < 6
+          ? regions.join(", ")
+          : null
         const reviewRounds = getReviewRounds()
         const activePlayers = getActivePlayers()
+        const searchProvider = getSearchProvider()
         const verticalIds = [
           ...(verticals.dataCenters ? ["data_centers"] : []),
           ...(verticals.connectivity ? ["connectivity_fibre"] : []),
@@ -219,10 +200,12 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
         }
         
         const response = await apiClient.generateNewsletter({
-          prompt: fullPrompt,
+          time_window: { start: startDate, end: endDate },
+          region_focus: regionFocus,
           max_review_rounds: reviewRounds,
           active_players: activePlayers,
           verticals: verticalIds,
+          search_provider: searchProvider,
         })
 
         toast({
@@ -275,139 +258,120 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
         </Card>
       )}
 
-      {/* Prompt Input */}
-      <Card className="mb-8 border-border/50 shadow-sm">
-        <CardContent className="p-0">
-          <Textarea
-            placeholder="Describe the briefing you'd like to generate — timeframe, regions, tone, or focus areas."
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="min-h-32 resize-none border-0 bg-muted/30 px-6 py-5 text-base text-foreground placeholder:text-muted-foreground/60 focus-visible:ring-0"
-            disabled={isGenerating}
-          />
-        </CardContent>
-      </Card>
+      {/* Newsletter Settings */}
+      <div className="mb-10 space-y-8">
+        <div>
+          <p className="text-sm font-medium text-foreground">Newsletter Settings</p>
+          <p className="mt-1 text-xs text-muted-foreground/70">
+            Time window, sector coverage, and geographies drive the run.
+          </p>
+        </div>
 
-      {/* Advanced Settings */}
-      <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen} className="mb-10">
-        <CollapsibleTrigger asChild>
-          <button className="group flex items-center gap-2 text-sm text-muted-foreground/80 transition-colors hover:text-muted-foreground">
-            <ChevronDown
-              className={`h-4 w-4 transition-transform duration-200 ${isAdvancedOpen ? "rotate-180" : ""}`}
-            />
-            <span>Advanced Settings</span>
-          </button>
-        </CollapsibleTrigger>
-        <p className="mt-1 text-xs text-muted-foreground/60">
-          These will be inferred automatically, but can be fine-tuned.
-        </p>
-        <CollapsibleContent className="pt-6 space-y-8">
-          {/* Time Window */}
-          <div>
-            <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-              Context
-            </p>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-foreground/90">Time Window</Label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
-                  disabled={isGenerating}
-                />
-                <span className="text-sm text-muted-foreground/60">to</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
-                  disabled={isGenerating}
-                />
-              </div>
+        {/* Time Window */}
+        <div>
+          <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+            Context
+          </p>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-foreground/90">Time Window</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                disabled={isGenerating}
+              />
+              <span className="text-sm text-muted-foreground/60">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="rounded-md border border-border/60 bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
+                disabled={isGenerating}
+              />
             </div>
           </div>
+        </div>
 
-          <div className="h-px bg-border/30" />
+        <div className="h-px bg-border/30" />
 
-          {/* Verticals */}
-          <div>
-            <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-              Sector Coverage
-            </p>
-            <div className="flex flex-wrap gap-x-6 gap-y-3">
-              <div className="flex items-center gap-2.5">
-                <Checkbox
-                  id="dc"
-                  checked={verticals.dataCenters}
-                  onCheckedChange={(checked) =>
-                    setVerticals((v) => ({ ...v, dataCenters: !!checked }))
-                  }
-                  disabled={isGenerating}
-                  className="border-border/60"
-                />
-                <label htmlFor="dc" className="text-sm text-foreground/90 cursor-pointer">
-                  Data Centers
-                </label>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <Checkbox
-                  id="cf"
-                  checked={verticals.connectivity}
-                  onCheckedChange={(checked) =>
-                    setVerticals((v) => ({ ...v, connectivity: !!checked }))
-                  }
-                  disabled={isGenerating}
-                  className="border-border/60"
-                />
-                <label htmlFor="cf" className="text-sm text-foreground/90 cursor-pointer">
-                  Connectivity & Fibre
-                </label>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <Checkbox
-                  id="tw"
-                  checked={verticals.towers}
-                  onCheckedChange={(checked) =>
-                    setVerticals((v) => ({ ...v, towers: !!checked }))
-                  }
-                  disabled={isGenerating}
-                  className="border-border/60"
-                />
-                <label htmlFor="tw" className="text-sm text-foreground/90 cursor-pointer">
-                  Towers & Wireless
-                </label>
-              </div>
+        {/* Verticals */}
+        <div>
+          <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+            Sector Coverage
+          </p>
+          <div className="flex flex-wrap gap-x-6 gap-y-3">
+            <div className="flex items-center gap-2.5">
+              <Checkbox
+                id="dc"
+                checked={verticals.dataCenters}
+                onCheckedChange={(checked) =>
+                  setVerticals((v) => ({ ...v, dataCenters: !!checked }))
+                }
+                disabled={isGenerating}
+                className="border-border/60"
+              />
+              <label htmlFor="dc" className="text-sm text-foreground/90 cursor-pointer">
+                Data Centers
+              </label>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Checkbox
+                id="cf"
+                checked={verticals.connectivity}
+                onCheckedChange={(checked) =>
+                  setVerticals((v) => ({ ...v, connectivity: !!checked }))
+                }
+                disabled={isGenerating}
+                className="border-border/60"
+              />
+              <label htmlFor="cf" className="text-sm text-foreground/90 cursor-pointer">
+                Connectivity & Fibre
+              </label>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Checkbox
+                id="tw"
+                checked={verticals.towers}
+                onCheckedChange={(checked) =>
+                  setVerticals((v) => ({ ...v, towers: !!checked }))
+                }
+                disabled={isGenerating}
+                className="border-border/60"
+              />
+              <label htmlFor="tw" className="text-sm text-foreground/90 cursor-pointer">
+                Towers & Wireless
+              </label>
             </div>
           </div>
+        </div>
 
-          <div className="h-px bg-border/30" />
+        <div className="h-px bg-border/30" />
 
-          {/* Regions */}
-          <div>
-            <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
-              Geographic Focus
-            </p>
-            <div className="flex flex-wrap gap-2.5">
-              {["UK", "EU", "US", "APAC", "MENA", "LATAM"].map((region) => (
-                <button
-                  key={region}
-                  onClick={() => toggleRegion(region)}
-                  disabled={isGenerating}
-                  className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-150 ${
-                    regions.includes(region)
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-card text-muted-foreground border border-border/60 hover:border-border hover:text-foreground"
-                  } disabled:opacity-50`}
-                >
-                  {region}
-                </button>
-              ))}
-            </div>
+        {/* Regions */}
+        <div>
+          <p className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
+            Geographic Focus
+          </p>
+          <div className="flex flex-wrap gap-2.5">
+            {["UK", "EU", "US", "APAC", "MENA", "LATAM"].map((region) => (
+              <button
+                key={region}
+                onClick={() => toggleRegion(region)}
+                disabled={isGenerating}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-150 ${
+                  regions.includes(region)
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-card text-muted-foreground border border-border/60 hover:border-border hover:text-foreground"
+                } disabled:opacity-50`}
+              >
+                {region}
+              </button>
+            ))}
           </div>
-        </CollapsibleContent>
-      </Collapsible>
+        </div>
+      </div>
 
       {/* Progress Steps */}
       {isGenerating && (
@@ -452,7 +416,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       <div className="flex flex-col items-end gap-3">
         <Button
           onClick={handleGenerate}
-          disabled={isGenerating || !prompt.trim()}
+          disabled={isGenerating || !(verticals.dataCenters || verticals.connectivity || verticals.towers)}
           size="lg"
           className="gap-2 px-6 shadow-sm transition-all duration-200 hover:shadow-md"
         >

@@ -82,14 +82,14 @@ class TestNewsletterAssembly:
         # This would test the full assembly node
         # For now, test the expected output structure
         expected_sections = [
-            "# Digital Infrastructure Weekly",
+            "# Digital Infra Newsletter",
             "## Data Centers",
             "## Connectivity & Fibre",
             "## Towers & Wireless Infrastructure",
         ]
 
         # Mock newsletter content
-        newsletter_md = """# Digital Infrastructure Weekly - 2026-02-02
+        newsletter_md = """# Digital Infra Newsletter - 2026-02-02
 
 _Time window: 2026-01-26 to 2026-02-02_  
 _Voice: expert_operator_

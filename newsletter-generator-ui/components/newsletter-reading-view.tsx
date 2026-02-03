@@ -11,6 +11,7 @@ import {
   Cable, 
   Radio, 
   Calendar, 
+  Clock,
   Send,
   Loader2,
   ChevronUp,
@@ -254,6 +255,11 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
             )}
           </h2>
         </div>
+        {section.headline && (
+          <p className="mb-4 text-sm font-medium text-muted-foreground">
+            {section.headline}
+          </p>
+        )}
 
         {section.bigPicture && (() => {
           // Extract citation numbers and make them clickable
@@ -379,6 +385,17 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
                 day: "numeric",
                 month: "long",
                 year: "numeric",
+              })}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-4 w-4" />
+              Generated{" "}
+              {new Date(newsletter.createdAt).toLocaleString("en-GB", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
               })}
             </span>
             {newsletter.voiceProfile !== 'expert_operator' && (

@@ -22,6 +22,10 @@ class SectionDraft(BaseModel):
     """Draft of a newsletter section."""
     
     section_id: str = Field(description="Section identifier (vertical name)")
+    headline: Optional[str] = Field(
+        default=None,
+        description="Short punchy headline for the section"
+    )
     big_picture: str = Field(
         description="Big picture paragraph (~80-140 words)"
     )
@@ -55,11 +59,16 @@ class SectionDraft(BaseModel):
         bp_nums = [str(id_to_num[eid]) for eid in self.big_picture_evidence_ids if eid in id_to_num]
         bp_cite = "".join(f"[{n}]" for n in bp_nums[:3])  # Limit to 3 citations
         
-        lines = [
+        lines = []
+        if self.headline:
+            lines.append(f"*{self.headline}*")
+            lines.append("")
+
+        lines.extend([
             self.big_picture + (f" {bp_cite}" if bp_cite else ""),
             "",
             "**Major player updates**",
-        ]
+        ])
         
         for bullet in self.bullets:
             nums = [str(id_to_num[eid]) for eid in bullet.evidence_ids if eid in id_to_num]

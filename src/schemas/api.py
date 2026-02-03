@@ -9,12 +9,33 @@ from .state import TimeWindow
 class GenerateRequest(BaseModel):
     """Request body for POST /newsletter/generate."""
     
-    prompt: str = Field(
-        description="Natural language describing timeframe, region focus, voice, etc."
+    prompt: Optional[str] = Field(
+        default=None,
+        description="Optional natural language description (legacy)."
+    )
+    time_window: Optional[TimeWindow] = Field(
+        default=None,
+        description="Explicit time window for coverage."
+    )
+    region_focus: Optional[str] = Field(
+        default=None,
+        description="Geographic focus (e.g. 'UK', 'EU', 'US', or comma-separated)."
+    )
+    voice_profile: Optional[str] = Field(
+        default=None,
+        description="Desired tone/voice. Defaults to expert_operator."
+    )
+    style_prompt: Optional[str] = Field(
+        default=None,
+        description="Additional style instructions."
     )
     verticals: Optional[list[str]] = Field(
         default=None,
         description="Optional list of vertical IDs to include (e.g. data_centers)"
+    )
+    search_provider: Optional[str] = Field(
+        default=None,
+        description="Search provider to use: openai (default) or tavily"
     )
     max_review_rounds: int = Field(
         default=2,

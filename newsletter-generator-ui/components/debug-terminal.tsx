@@ -151,7 +151,7 @@ export function DebugTerminal({ events, onClear, isGenerating = false }: DebugTe
                     </span>
                   )}
                   <span className={cn(
-                    "flex-1",
+                    "flex-1 whitespace-pre-wrap break-words",
                     event.category === 'llm_stream' ? 'text-green-300/70 pl-14' : 'text-zinc-200'
                   )}>
                     {event.content}

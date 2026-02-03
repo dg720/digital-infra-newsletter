@@ -72,9 +72,12 @@ export type PlayerNames = {
   }
 }
 
+export type SearchProvider = "openai" | "tavily"
+
 const STORAGE_KEY = "newsletter-player-settings"
 const NAMES_STORAGE_KEY = "newsletter-player-names"
 const REVIEW_ROUNDS_KEY = "newsletter-review-rounds"
+const SEARCH_PROVIDER_KEY = "newsletter-search-provider"
 
 export function getPlayerSettings(): PlayerSettings {
   if (typeof window === "undefined") return {}
@@ -143,6 +146,15 @@ export function getReviewRounds(): number {
   return 2
 }
 
+export function getSearchProvider(): SearchProvider {
+  if (typeof window === "undefined") return "openai"
+  const stored = localStorage.getItem(SEARCH_PROVIDER_KEY)
+  if (stored === "tavily" || stored === "openai") {
+    return stored
+  }
+  return "openai"
+}
+
 export function getActivePlayers(): { [vertical: string]: string[] } {
   const settings = getPlayerSettings()
   const names = getPlayerNames()
@@ -177,6 +189,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [settings, setSettings] = useState<PlayerSettings>({})
   const [names, setNames] = useState<PlayerNames>({})
   const [reviewRounds, setReviewRounds] = useState(2)
+  const [searchProvider, setSearchProvider] = useState<SearchProvider>("openai")
   const [editingPlayer, setEditingPlayer] = useState<{vertical: string, player: string} | null>(null)
   const [editValue, setEditValue] = useState("")
 
@@ -184,6 +197,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     setSettings(getPlayerSettings())
     setNames(getPlayerNames())
     setReviewRounds(getReviewRounds())
+    setSearchProvider(getSearchProvider())
   }, [open])
 
   const handleToggle = (vertical: string, player: string, enabled: boolean) => {
@@ -264,6 +278,11 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     localStorage.setItem(REVIEW_ROUNDS_KEY, rounds.toString())
   }
 
+  const handleSearchProviderChange = (provider: SearchProvider) => {
+    setSearchProvider(provider)
+    localStorage.setItem(SEARCH_PROVIDER_KEY, provider)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
@@ -310,6 +329,34 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                   disabled={reviewRounds >= 5}
                 >
                   +
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Search Provider */}
+          <div className="rounded-lg border border-border p-4 bg-muted/30">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label className="text-sm font-medium">Search Provider</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Default uses OpenAI web search for lower cost. Switch to Tavily if needed.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={searchProvider === "openai" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleSearchProviderChange("openai")}
+                >
+                  OpenAI
+                </Button>
+                <Button
+                  variant={searchProvider === "tavily" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handleSearchProviderChange("tavily")}
+                >
+                  Tavily
                 </Button>
               </div>
             </div>

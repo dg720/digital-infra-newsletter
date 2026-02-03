@@ -1,12 +1,13 @@
 """LangGraph node implementations."""
 
 from typing import Dict, Any, List
+from datetime import date, timedelta
 import asyncio
 
-from ..schemas.state import NewsletterState
+from ..schemas.state import NewsletterState, ParsedInput, TimeWindow
 from ..schemas.evidence import EvidencePack
 from ..schemas.sections import SectionDraft, ReviewResult
-from ..constants import Vertical, VERTICAL_DISPLAY_NAMES
+from ..constants import Vertical, VERTICAL_DISPLAY_NAMES, DEFAULT_VOICE_PROFILE
 from ..agents.manager import parse_natural_language_input, create_initial_state
 from ..agents.research import research_vertical
 from ..agents.reviewer import review_section
@@ -24,12 +25,46 @@ async def manager_init_node(state: Dict[str, Any]) -> Dict[str, Any]:
     max_review_rounds = state.get("max_review_rounds", 2)
     active_players = state.get("active_players", None)
     requested_verticals = state.get("verticals", None)
+    search_provider = state.get("search_provider", None)
+    time_window = state.get("time_window")
+    region_focus = state.get("region_focus")
+    voice_profile = state.get("voice_profile")
+    style_prompt = state.get("style_prompt")
+
+    has_structured_input = any(
+        value is not None for value in [time_window, region_focus, voice_profile, style_prompt]
+    ) or bool(requested_verticals)
+
+    if has_structured_input:
+        if time_window:
+            tw = TimeWindow(**time_window)
+        else:
+            current_date = date.today()
+            tw = TimeWindow(start=current_date - timedelta(days=7), end=current_date)
+
+        parsed_verticals = []
+        if requested_verticals:
+            for v in requested_verticals:
+                try:
+                    parsed_verticals.append(Vertical(v))
+                except ValueError:
+                    continue
+        if not parsed_verticals:
+            parsed_verticals = list(Vertical)
+
+        parsed_input = ParsedInput(
+            time_window=tw,
+            verticals=parsed_verticals,
+            voice_profile=voice_profile or DEFAULT_VOICE_PROFILE,
+            region_focus=region_focus,
+            style_prompt=style_prompt,
+        )
+    else:
+        # Parse input
+        parsed_input = parse_natural_language_input(prompt)
     
-    # Parse input
-    parsed_input = parse_natural_language_input(prompt)
-    
-    # Override verticals if explicitly provided
-    if requested_verticals:
+    # Override verticals if explicitly provided and parsed_input came from prompt
+    if requested_verticals and not has_structured_input:
         parsed_verticals = []
         for v in requested_verticals:
             try:
@@ -51,7 +86,10 @@ async def manager_init_node(state: Dict[str, Any]) -> Dict[str, Any]:
         else:
             newsletter_state.comps = active_players
         newsletter_state.active_players_provided = True
-    
+
+    if search_provider:
+        newsletter_state.search_provider = search_provider
+
     return {"newsletter_state": newsletter_state.model_dump()}
 
 
@@ -189,7 +227,7 @@ def assemble_newsletter_node(state: Dict[str, Any]) -> Dict[str, Any]:
     
     # Build newsletter markdown
     lines = [
-        f"# Digital Infrastructure Weekly — {newsletter_state.time_window.end.isoformat()}",
+        f"# Digital Infra Newsletter — {newsletter_state.time_window.end.isoformat()}",
         "",
         f"_Time window: {newsletter_state.time_window.start.isoformat()} to {newsletter_state.time_window.end.isoformat()}_  ",
         f"_Voice: {newsletter_state.voice_profile}_",

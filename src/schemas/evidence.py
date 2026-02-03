@@ -18,7 +18,7 @@ class EvidenceItem(BaseModel):
     source_type: Literal["web", "news", "market_data"] = Field(
         description="Type of source: web, news, or market_data"
     )
-    source_name: Literal["tavily", "newspaper3k", "yfinance"] = Field(
+    source_name: Literal["tavily", "openai_web_search", "newspaper3k", "yfinance"] = Field(
         description="Name of the tool that retrieved this evidence"
     )
     retrieved_at: datetime = Field(

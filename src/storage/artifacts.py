@@ -162,6 +162,7 @@ class ArtifactStore:
             "voice_profile": state.voice_profile,
             "region_focus": state.region_focus,
             "style_prompt": state.style_prompt,
+            "search_provider": state.search_provider,
             "verticals_included": [v.value for v in state.verticals],
             "model_versions": state.model_versions,
             "created_at": datetime.utcnow().isoformat(),

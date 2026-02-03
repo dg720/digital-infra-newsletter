@@ -12,8 +12,13 @@ export interface TimeWindow {
 }
 
 export interface GenerateRequest {
-  prompt: string;
+  prompt?: string;
+  time_window?: TimeWindow;
+  region_focus?: string | null;
+  voice_profile?: string;
+  style_prompt?: string | null;
   verticals?: string[];
+  search_provider?: string;
   max_review_rounds?: number;
   active_players?: { [vertical: string]: string[] };
 }
@@ -65,6 +70,7 @@ export interface Bullet {
 
 export interface SectionData {
   section_id: string;
+  headline?: string;
   big_picture: string;
   big_picture_evidence_ids: string[];
   bullets: Bullet[];
@@ -79,6 +85,7 @@ export interface NewsletterListItem {
   voiceProfile: string;
   verticals: string[];
   regions: string[];
+  createdAt: string;
 }
 
 export interface NewsletterDetail {
@@ -89,6 +96,7 @@ export interface NewsletterDetail {
   voiceProfile: string;
   verticals: string[];
   regions: string[];
+  createdAt: string;
   sections: {
     dataCenters: SectionForUI;
     connectivity: SectionForUI;
@@ -97,6 +105,7 @@ export interface NewsletterDetail {
 }
 
 export interface SectionForUI {
+  headline?: string;
   bigPicture: string;
   bullets: Array<{
     text: string;
@@ -422,6 +431,7 @@ export function convertToUIFormat(
       }));
 
     return {
+      headline: section.headline,
       bigPicture: bigPictureWithCites,
       bullets: bulletsWithCites,
       evidence: referencedEvidence,
@@ -437,7 +447,7 @@ export function convertToUIFormat(
 
   return {
     id: meta.newsletter_id,
-    title: `Digital Infra Weekly — ${new Date(formattedDate).toLocaleDateString('en-GB', {
+    title: `Digital Infra Newsletter — ${new Date(formattedDate).toLocaleDateString('en-GB', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -447,6 +457,7 @@ export function convertToUIFormat(
     voiceProfile: meta.voice_profile,
     verticals: meta.verticals_included.map((v) => verticalMap[v] || v),
     regions: meta.region_focus ? [meta.region_focus] : ['Global'],
+    createdAt: meta.created_at,
     sections: {
       dataCenters: convertSection('data_centers'),
       connectivity: convertSection('connectivity_fibre'),
@@ -472,6 +483,7 @@ export async function fetchNewsletterDetail(
       // Section may not exist
       sections[vertical] = {
         section_id: vertical,
+        headline: '',
         big_picture: '',
         big_picture_evidence_ids: [],
         bullets: [],
@@ -509,7 +521,7 @@ export async function fetchNewsletterList(): Promise<NewsletterListItem[]> {
 
       items.push({
         id,
-        title: `Digital Infra Weekly — ${new Date(formattedDate).toLocaleDateString('en-GB', {
+        title: `Digital Infra Newsletter — ${new Date(formattedDate).toLocaleDateString('en-GB', {
           month: 'short',
           day: 'numeric',
           year: 'numeric',
@@ -519,6 +531,7 @@ export async function fetchNewsletterList(): Promise<NewsletterListItem[]> {
         voiceProfile: meta.voice_profile,
         verticals: meta.verticals_included.map((v) => verticalMap[v] || v),
         regions: meta.region_focus ? [meta.region_focus] : ['Global'],
+        createdAt: meta.created_at,
       });
     } catch {
       // Skip newsletters that can't be loaded

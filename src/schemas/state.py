@@ -94,6 +94,10 @@ class NewsletterState(BaseModel):
         default=False,
         description="Whether active players were explicitly provided in the request"
     )
+    search_provider: str = Field(
+        default="openai",
+        description="Search provider to use: openai or tavily"
+    )
     evidence_budgets: Dict[str, int] = Field(
         default_factory=dict,
         description="Tool call budget per vertical"

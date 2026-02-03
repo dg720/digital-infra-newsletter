@@ -40,7 +40,7 @@ export function Header({ view, onBackToDashboard, onStartGeneration }: HeaderPro
                   <Newspaper className="h-4 w-4 text-primary-foreground" />
                 </div>
                 <span className="text-base font-semibold tracking-tight text-foreground">
-                  Digital Infra Weekly
+                  Digital Infra Newsletter
                 </span>
               </button>
             </div>

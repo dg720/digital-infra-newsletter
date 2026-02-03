@@ -69,10 +69,15 @@ def sse_event(event: str, data: dict) -> str:
 
 
 async def generate_newsletter_stream(
-    prompt: str,
+    prompt: str | None = None,
     max_review_rounds: int = 2,
     active_players: dict = None,
     verticals: list[str] | None = None,
+    search_provider: str | None = None,
+    time_window: dict | None = None,
+    region_focus: str | None = None,
+    voice_profile: str | None = None,
+    style_prompt: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream generation progress via SSE with real workflow updates."""
     from .workflow.graph import run_newsletter_generation_streaming
@@ -84,6 +89,11 @@ async def generate_newsletter_stream(
             max_review_rounds=max_review_rounds,
             active_players=active_players,
             verticals=verticals,
+            search_provider=search_provider,
+            time_window=time_window,
+            region_focus=region_focus,
+            voice_profile=voice_profile,
+            style_prompt=style_prompt,
         ):
             event_type = event.get("type", "status")
             
@@ -121,19 +131,7 @@ async def root():
 @app.post("/newsletter/generate", response_model=GenerateResponse)
 async def generate_newsletter(request: GenerateRequest) -> GenerateResponse:
     """
-    Generate a full newsletter issue from a natural language prompt.
-    
-    The manager agent parses your prompt to extract:
-    - Time window (e.g., "last week", "past 7 days")
-    - Verticals to include (data centers, connectivity, towers)
-    - Voice/tone preferences
-    - Region focus (optional)
-    - Style instructions (optional)
-    
-    Example prompts:
-    - "Generate a newsletter for the last week"
-    - "Summarise data centre and fibre news from the UK for the past 10 days"
-    - "Create a conversational newsletter about tower infrastructure in Europe"
+    Generate a full newsletter issue from structured settings.
     """
     try:
         # Run the workflow
@@ -142,6 +140,11 @@ async def generate_newsletter(request: GenerateRequest) -> GenerateResponse:
             max_review_rounds=request.max_review_rounds,
             active_players=request.active_players,
             verticals=request.verticals,
+            search_provider=request.search_provider,
+            time_window=request.time_window.model_dump() if request.time_window else None,
+            region_focus=request.region_focus,
+            voice_profile=request.voice_profile,
+            style_prompt=request.style_prompt,
         )
         
         # Extract newsletter ID and paths
@@ -173,6 +176,11 @@ async def generate_newsletter_streaming(request: GenerateRequest):
             request.max_review_rounds,
             request.active_players,
             request.verticals,
+            request.search_provider,
+            request.time_window.model_dump() if request.time_window else None,
+            request.region_focus,
+            request.voice_profile,
+            request.style_prompt,
         ),
         media_type="text/event-stream",
         headers={
@@ -279,7 +287,7 @@ async def update_section(
             # Reassemble newsletter
             from .constants import VERTICAL_DISPLAY_NAMES
             lines = [
-                f"# Digital Infrastructure Weekly — {newsletter_state.time_window.end.isoformat()}",
+                f"# Digital Infra Newsletter — {newsletter_state.time_window.end.isoformat()}",
                 "",
                 f"_Time window: {newsletter_state.time_window.start.isoformat()} to {newsletter_state.time_window.end.isoformat()}_  ",
                 f"_Voice: {newsletter_state.voice_profile}_",

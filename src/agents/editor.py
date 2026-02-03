@@ -20,6 +20,7 @@ Make minor edits to ensure consistency across all sections:
 - Shorten or rearrange sentences for readability
 - Fix any stylistic inconsistencies
 - Ensure consistent formatting
+- Create a short, punchy headline for each section that captures the main theme
 
 ## Critical Constraints
 - DO NOT add new facts or claims
@@ -41,6 +42,7 @@ Return the edited sections in JSON format:
 {{
   "sections": {{
     "data_centers": {{
+      "headline": "Short punchy headline...",
       "big_picture": "Edited paragraph...",
       "big_picture_evidence_ids": ["ev_xxx"],
       "bullets": [
@@ -97,6 +99,7 @@ async def edit_sections(
     # Prepare sections JSON
     sections_json = json.dumps({
         section_id: {
+            "headline": draft.headline,
             "big_picture": draft.big_picture,
             "big_picture_evidence_ids": draft.big_picture_evidence_ids,
             "bullets": [
@@ -147,6 +150,9 @@ async def edit_sections(
     for section_id, draft in drafts.items():
         if section_id in sections_data:
             edited_data = sections_data[section_id]
+            headline_value = edited_data.get("headline", draft.headline)
+            if isinstance(headline_value, str):
+                headline_value = strip_evidence_markers(headline_value).strip() or None
             
             # Build bullets, preserving evidence IDs if the editor drops them
             bullets = []
@@ -168,6 +174,7 @@ async def edit_sections(
             
             edited_drafts[section_id] = SectionDraft(
                 section_id=section_id,
+                headline=headline_value,
                 big_picture=strip_evidence_markers(
                     edited_data.get("big_picture", draft.big_picture)
                 ),

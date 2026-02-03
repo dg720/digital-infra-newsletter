@@ -26,9 +26,14 @@ class WorkflowState(TypedDict, total=False):
     """State type for the newsletter workflow."""
     # Input
     prompt: str
+    time_window: Dict[str, Any]
+    region_focus: str
+    voice_profile: str
+    style_prompt: str
     max_review_rounds: int
     active_players: Dict[str, List[str]]
     verticals: List[str]
+    search_provider: str
     
     # Parsed state
     newsletter_state: Dict[str, Any]
@@ -108,16 +113,21 @@ def create_newsletter_graph() -> StateGraph:
 
 
 async def run_newsletter_generation(
-    prompt: str,
+    prompt: str | None = None,
     max_review_rounds: int = 2,
     active_players: dict | None = None,
     verticals: list[str] | None = None,
+    search_provider: str | None = None,
+    time_window: Dict[str, Any] | None = None,
+    region_focus: str | None = None,
+    voice_profile: str | None = None,
+    style_prompt: str | None = None,
 ) -> Dict[str, Any]:
     """
     Run the full newsletter generation workflow.
     
     Args:
-        prompt: Natural language description of desired newsletter.
+        prompt: Optional natural language description of desired newsletter.
         max_review_rounds: Maximum review iterations.
     
     Returns:
@@ -129,13 +139,23 @@ async def run_newsletter_generation(
     
     # Initial state
     initial_state: WorkflowState = {
-        "prompt": prompt,
+        "prompt": prompt or "",
         "max_review_rounds": max_review_rounds,
     }
     if active_players:
         initial_state["active_players"] = active_players
     if verticals:
         initial_state["verticals"] = verticals
+    if search_provider:
+        initial_state["search_provider"] = search_provider
+    if time_window:
+        initial_state["time_window"] = time_window
+    if region_focus is not None:
+        initial_state["region_focus"] = region_focus
+    if voice_profile is not None:
+        initial_state["voice_profile"] = voice_profile
+    if style_prompt is not None:
+        initial_state["style_prompt"] = style_prompt
     
     # Run workflow
     final_state = await compiled.ainvoke(initial_state)
@@ -144,10 +164,15 @@ async def run_newsletter_generation(
 
 
 async def run_newsletter_generation_streaming(
-    prompt: str,
+    prompt: str | None = None,
     max_review_rounds: int = 2,
     active_players: dict = None,
     verticals: list[str] | None = None,
+    search_provider: str | None = None,
+    time_window: Dict[str, Any] | None = None,
+    region_focus: str | None = None,
+    voice_profile: str | None = None,
+    style_prompt: str | None = None,
 ):
     """
     Run the newsletter generation workflow with streaming progress updates.
@@ -163,7 +188,7 @@ async def run_newsletter_generation_streaming(
     
     # Map node names to user-friendly step names and messages
     node_display = {
-        "manager_init": ("manager", "Parsing your request..."),
+        "manager_init": ("manager", "Initializing newsletter..."),
         "research_data_centers": ("research_data_centers", "Researching Data Centers..."),
         "research_connectivity_fibre": ("research_connectivity", "Researching Connectivity & Fibre..."),
         "research_towers_wireless": ("research_towers", "Researching Towers & Wireless..."),
@@ -179,17 +204,29 @@ async def run_newsletter_generation_streaming(
     
     # Initial state - include active_players if provided
     initial_state: WorkflowState = {
-        "prompt": prompt,
+        "prompt": prompt or "",
         "max_review_rounds": max_review_rounds,
     }
     if active_players:
         initial_state["active_players"] = active_players
     if verticals:
         initial_state["verticals"] = verticals
+    if search_provider:
+        initial_state["search_provider"] = search_provider
+    if time_window:
+        initial_state["time_window"] = time_window
+    if region_focus is not None:
+        initial_state["region_focus"] = region_focus
+    if voice_profile is not None:
+        initial_state["voice_profile"] = voice_profile
+    if style_prompt is not None:
+        initial_state["style_prompt"] = style_prompt
     
     final_state = None
     seen_nodes = set()
     completed_nodes = set()
+    review_active = False
+    review_completed = False
     
     try:
         # Use astream_events to get real-time updates
@@ -199,10 +236,14 @@ async def run_newsletter_generation_streaming(
             
             # Track node starts for progress updates
             if event_kind == "on_chain_start":
-                if event_name in node_display and event_name not in seen_nodes:
-                    seen_nodes.add(event_name)
+                if event_name in node_display:
                     step, message = node_display[event_name]
-                    yield {"type": "status", "step": step, "message": message, "status": "start"}
+                    if event_name == "review_sections":
+                        review_active = True
+                        yield {"type": "status", "step": step, "message": message, "status": "start"}
+                    elif event_name not in seen_nodes:
+                        seen_nodes.add(event_name)
+                        yield {"type": "status", "step": step, "message": message, "status": "start"}
                     yield {
                         "type": "debug",
                         "category": "node",
@@ -212,10 +253,14 @@ async def run_newsletter_generation_streaming(
             
             # Track node completions
             if event_kind == "on_chain_end":
-                if event_name in node_display and event_name not in completed_nodes:
-                    completed_nodes.add(event_name)
+                if event_name in node_display:
                     step, message = node_display[event_name]
-                    yield {"type": "status", "step": step, "message": f"Completed: {message}", "status": "complete"}
+                    if event_name == "review_sections":
+                        # Defer marking review complete until we exit the review loop
+                        pass
+                    elif event_name not in completed_nodes:
+                        completed_nodes.add(event_name)
+                        yield {"type": "status", "step": step, "message": f"Completed: {message}", "status": "complete"}
                     yield {
                         "type": "debug",
                         "category": "node",
@@ -227,6 +272,13 @@ async def run_newsletter_generation_streaming(
                     # This is the final output
                     final_state = event.get("data", {}).get("output", {})
             
+            # If we reach editor, review loops are finished
+            if event_kind == "on_chain_start" and event_name == "editor_pass":
+                if review_active and not review_completed:
+                    review_completed = True
+                    step, message = node_display.get("review_sections", ("review", "Reviewing all sections..."))
+                    yield {"type": "status", "step": step, "message": f"Completed: {message}", "status": "complete"}
+
             # Capture tool calls - these show web searches and article fetches
             if event_kind == "on_tool_start":
                 tool_name = event_name
@@ -279,11 +331,11 @@ async def run_newsletter_generation_streaming(
                 output = event.get("data", {}).get("output", {})
                 content = ""
                 if hasattr(output, "content"):
-                    content = output.content[:200] + "..." if len(output.content) > 200 else output.content
+                    content = output.content or ""
                 yield {
                     "type": "debug",
                     "category": "llm",
-                    "content": f"   └─ Response: {content[:100]}..." if content else "   └─ Response received",
+                    "content": f"   └─ Response: {content}" if content else "   └─ Response received",
                     "metadata": {"model": model_name, "action": "end"}
                 }
         

@@ -166,7 +166,7 @@ Notes:
 ### 5.2 Markdown template (final newsletter)
 
 ```md
-# Digital Infrastructure Weekly — {issue_date}
+# Digital Infra Newsletter — {issue_date}
 
 _Time window: {start_date} to {end_date}_  
 _Voice: {voice_profile}_

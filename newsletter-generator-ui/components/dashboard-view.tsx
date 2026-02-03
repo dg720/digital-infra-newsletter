@@ -21,7 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Calendar, Building2, Cable, Radio, Plus, Loader2, RefreshCw, Trash2 } from "lucide-react"
+import { Calendar, Clock, Building2, Cable, Radio, Plus, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { apiClient, type NewsletterListItem } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
@@ -216,6 +216,17 @@ export function DashboardView({
                             year: "numeric",
                           })}
                         </span>
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5" />
+                          Generated{" "}
+                          {new Date(newsletter.createdAt).toLocaleString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -254,7 +265,7 @@ export function DashboardView({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         onClick={(e) => handleDeleteClick(e, newsletter.id)}
                       >
                         <Trash2 className="h-4 w-4" />

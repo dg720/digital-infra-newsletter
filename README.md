@@ -6,7 +6,7 @@ Automated weekly newsletter generation for digital infrastructure using a LangGr
 
 - **Multi-Agent Workflow**: Manager → Research Agents → Reviewer → Editor → Assembly
 - **Three Verticals**: Data Centers, Connectivity & Fibre, Towers & Wireless Infrastructure
-- **Natural Language Input**: Describe your newsletter requirements in plain English
+- **Structured Settings**: Configure time window, sectors, and geographies (prompt input optional for legacy calls)
 - **Evidence-Based**: Every claim is backed by cited sources
 - **FastAPI Backend**: RESTful API for newsletter generation and retrieval
 

@@ -3,7 +3,7 @@ import type { Newsletter } from "@/app/page"
 export const MOCK_NEWSLETTERS: Newsletter[] = [
   {
     id: "1",
-    title: "Digital Infra Weekly — Feb 2, 2026",
+    title: "Digital Infra Newsletter — Feb 2, 2026",
     date: "2026-02-02",
     timeWindow: { start: "2026-01-26", end: "2026-02-02" },
     voiceProfile: "conversational",
@@ -88,7 +88,7 @@ export const MOCK_NEWSLETTERS: Newsletter[] = [
   },
   {
     id: "2",
-    title: "Digital Infra Weekly — Jan 26, 2026",
+    title: "Digital Infra Newsletter — Jan 26, 2026",
     date: "2026-01-26",
     timeWindow: { start: "2026-01-19", end: "2026-01-26" },
     voiceProfile: "analytical",
@@ -140,7 +140,7 @@ export const MOCK_NEWSLETTERS: Newsletter[] = [
   },
   {
     id: "3",
-    title: "Digital Infra Weekly — Jan 19, 2026",
+    title: "Digital Infra Newsletter — Jan 19, 2026",
     date: "2026-01-19",
     timeWindow: { start: "2026-01-12", end: "2026-01-19" },
     voiceProfile: "formal",

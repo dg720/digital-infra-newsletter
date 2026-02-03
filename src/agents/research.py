@@ -1,6 +1,7 @@
 """Research agents - vertical specialists that gather evidence and draft sections."""
 
 from typing import List, Optional
+from datetime import date, datetime
 import asyncio
 import json
 
@@ -13,7 +14,7 @@ from ..schemas.evidence import EvidenceItem, EvidencePack
 from ..schemas.sections import SectionDraft, Bullet
 from ..constants import Vertical, MAJOR_PLAYERS, SECTOR_KEYWORDS, VERTICAL_DISPLAY_NAMES
 from ..utils.citations import extract_evidence_ids, normalize_evidence_ids, strip_evidence_markers
-from ..tools import web_search, fetch_article
+from ..tools import web_search, openai_web_search, fetch_article
 
 
 # System prompt template for research agents
@@ -38,10 +39,12 @@ Your task is to research recent news and developments in the {vertical_name} sec
 - Voice/Tone: {voice_profile}
 - Region Focus: {region_focus}
 {style_instructions}
+- Add a short, punchy headline (4-8 words) that captures the main theme
 
 ## Output Format
 Respond with a JSON object containing EXACTLY {bullet_count} bullets:
 {{
+  "headline": "Punchy headline here",
   "big_picture": "Your 80-140 word summary paragraph here...",
   "big_picture_evidence_ids": ["ev_xxx", "ev_yyy"],
   "bullets": [
@@ -141,9 +144,11 @@ async def research_vertical(
     loop = asyncio.get_running_loop()
     search_tasks = []
     
+    search_fn = openai_web_search if state.search_provider == "openai" else web_search
+
     for query in queries:
         search_tasks.append(
-            loop.run_in_executor(None, web_search, query, 5, time_window_days)
+            loop.run_in_executor(None, search_fn, query, 5, time_window_days)
         )
         
     if search_tasks:
@@ -154,7 +159,7 @@ async def research_vertical(
             for item in results:
                 evidence_pack.add_item(item)
 
-    # 2. Parallelize Article Fetching
+    # 2. Parallelize Article Fetching + Date Filtering
     # -------------------------------
     urls_to_fetch = []
     remaining_budget = max_calls - call_count
@@ -178,15 +183,65 @@ async def research_vertical(
             
             fetched_items = await asyncio.gather(*fetch_tasks)
             
+            excluded_urls = set()
             for item in fetched_items:
-                if item:
-                    evidence_pack.add_item(item)
-                    call_count += 1
+                if not item:
+                    continue
+                if _is_outside_time_window(
+                    item,
+                    state.time_window.start,
+                    state.time_window.end,
+                    require_publish_date=True,
+                ):
+                    if item.url:
+                        excluded_urls.add(item.url)
+                    continue
+                evidence_pack.add_item(item)
+                call_count += 1
+
+            if excluded_urls:
+                evidence_pack.items = [
+                    existing
+                    for existing in evidence_pack.items
+                    if existing.url not in excluded_urls
+                    and not _is_outside_time_window(
+                        existing, state.time_window.start, state.time_window.end
+                    )
+                ]
     
     # Now draft the section using LLM
     draft = await _draft_section(vertical, state, evidence_pack)
     
     return evidence_pack, draft
+
+
+def _parse_publish_date(value: str | None) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        if value.endswith("Z"):
+            value = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(value)
+        return parsed.date()
+    except ValueError:
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+
+
+def _is_outside_time_window(
+    item: EvidenceItem,
+    start: date,
+    end: date,
+    require_publish_date: bool = False,
+) -> bool:
+    publish_date = None
+    if item.data and isinstance(item.data, dict):
+        publish_date = _parse_publish_date(item.data.get("publish_date"))
+    if not publish_date:
+        return require_publish_date
+    return publish_date < start or publish_date > end
 
 
 async def _draft_section(
@@ -291,6 +346,9 @@ async def _draft_section(
         return picked
 
     raw_big_picture = parsed.get("big_picture", "")
+    headline = parsed.get("headline")
+    if isinstance(headline, str):
+        headline = strip_evidence_markers(headline).strip() or None
     big_picture_ids = normalize_evidence_ids(parsed.get("big_picture_evidence_ids", []))
     if not big_picture_ids:
         big_picture_ids = extract_evidence_ids(raw_big_picture)
@@ -316,6 +374,7 @@ async def _draft_section(
     
     return SectionDraft(
         section_id=vertical.value,
+        headline=headline,
         big_picture=strip_evidence_markers(raw_big_picture),
         big_picture_evidence_ids=big_picture_ids,
         bullets=bullets,

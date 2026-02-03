@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     model_research: str = Field(default="gpt-4o", alias="MODEL_RESEARCH")
     model_review: str = Field(default="gpt-4o", alias="MODEL_REVIEW")
     model_edit: str = Field(default="gpt-4o", alias="MODEL_EDIT")
+    model_web_search: str = Field(default="gpt-4o-mini", alias="MODEL_WEB_SEARCH")
     
     # Agent Configuration
     max_tool_calls_per_agent: int = Field(default=12, alias="MAX_TOOL_CALLS_PER_AGENT")
