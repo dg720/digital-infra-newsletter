@@ -139,6 +139,7 @@ class ApiClient {
   async generateNewsletterStreaming(
     request: GenerateRequest,
     onStatus?: (step: string, message: string, status: 'start' | 'complete') => void,
+    onDebug?: (category: string, content: string, metadata: Record<string, unknown>) => void,
   ): Promise<GenerateResponse> {
     const response = await fetch(`${this.baseUrl}/newsletter/generate/stream`, {
       method: 'POST',
@@ -160,6 +161,7 @@ class ApiClient {
     const decoder = new TextDecoder();
     let buffer = '';
     let result: GenerateResponse | null = null;
+    let currentEventType = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -171,26 +173,40 @@ class ApiClient {
 
       for (const line of lines) {
         if (line.startsWith('event: ')) {
-          const eventType = line.slice(7);
+          currentEventType = line.slice(7).trim();
           continue;
         }
         if (line.startsWith('data: ')) {
-          const data = JSON.parse(line.slice(6));
-          
-          if (data.step && data.message && onStatus) {
-            onStatus(data.step, data.message, data.status || 'start');
-          }
-          
-          if (data.newsletter_id) {
-            result = {
-              newsletter_id: data.newsletter_id,
-              paths: data.paths,
-              status: data.status || 'completed',
-            };
-          }
-          
-          if (data.message && !data.step) {
-            throw new Error(data.message);
+          try {
+            const data = JSON.parse(line.slice(6));
+            
+            // Handle status events
+            if (currentEventType === 'status' && data.step && data.message && onStatus) {
+              onStatus(data.step, data.message, data.status || 'start');
+            }
+            
+            // Handle debug events
+            if (currentEventType === 'debug' && onDebug) {
+              onDebug(data.category || 'unknown', data.content || '', data.metadata || {});
+            }
+            
+            // Handle completion
+            if (currentEventType === 'complete' && data.newsletter_id) {
+              result = {
+                newsletter_id: data.newsletter_id,
+                paths: data.paths,
+                status: data.status || 'completed',
+              };
+            }
+            
+            // Handle errors
+            if (currentEventType === 'error' && data.message) {
+              throw new Error(data.message);
+            }
+          } catch (parseError) {
+            // Ignore parse errors for malformed lines
+            if (parseError instanceof SyntaxError) continue;
+            throw parseError;
           }
         }
       }

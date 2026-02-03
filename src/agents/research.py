@@ -204,11 +204,14 @@ async def _draft_section(
     section_id = vertical.value
     if state.comps and section_id in state.comps:
         active_players = state.comps[section_id]
+        print(f"[RESEARCH] Using state.comps for {section_id}: {active_players}")
     else:
         active_players = MAJOR_PLAYERS.get(vertical, [])
+        print(f"[RESEARCH] Using MAJOR_PLAYERS for {section_id}: {active_players[:5]}")
     
     # Bullet count matches the number of active players (max 5)
     bullet_count = min(len(active_players), 5) if active_players else 5
+    print(f"[RESEARCH] {section_id}: bullet_count={bullet_count}, active_players_count={len(active_players)}")
     
     # Build prompt using active players, not all players
     major_players_str = "\n".join(f"- {p}" for p in active_players)

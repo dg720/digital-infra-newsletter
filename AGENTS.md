@@ -1,22 +1,23 @@
-# AGENTS.md – Generic Codex Project Operating Guide
+# AGENTS.md - Generic Codex Project Operating Guide
 
 This is a **project-agnostic** operating guide for a Codex-style coding agent with terminal + git access.
 Follow this guide unless `SPEC.md` (or explicit project instructions) override it.
 
 ## 1) Sources of truth (precedence)
 
-1. `RAILWAY_CLI_DEPLOY.md` / `DEPLOY*.md` — deployment steps, environment variables, service layout.
-2. `SPEC.md` — requirements, user flows, pages, API contracts, and acceptance criteria.
-3. `README.md` — local setup/run/test commands and repo conventions.
-4. Code + tests — if docs conflict, rely on tests and observed runtime behavior.
+1. `RAILWAY_CLI_DEPLOY.md` / `DEPLOY*.md` -- deployment steps, environment variables, service layout.
+2. `SPEC.md` -- requirements, user flows, pages, API contracts, and acceptance criteria.
+3. `README.md` -- local setup/run/test commands and repo conventions.
+4. Code + tests -- if docs conflict, rely on tests and observed runtime behavior.
 
 ## 2) Working style
 
 - Make small, verifiable changes.
 - Prefer simple implementations over clever ones.
 - Keep progress visible (checklists in PR notes or `NOTES.md` if helpful).
+- For UI/UX changes, feature debugging, and end-to-end verification, use the Playwright MCP to drive the browser and validate flows.
 
-## 3) Execution loop (build → test → deploy)
+## 3) Execution loop (build -> test -> deploy)
 
 Repeat until the stop condition is met:
 
@@ -26,9 +27,10 @@ Repeat until the stop condition is met:
 4. Run local checks (lint/format if present) and tests.
 5. Run a smoke test (key routes/endpoints) locally.
 6. Debug until green.
-7. Commit with a clear message.
-8. Deploy using `RAILWAY_CLI_DEPLOY.md` step-by-step.
-9. Run live smoke tests against the deployed URL.
+7. For UI/UX or end-to-end changes, run Playwright MCP review cycles to validate behavior and fix issues. Cap at 3 cycles; if still failing, stop and report findings and next steps.
+8. Commit with a clear message.
+9. Deploy using `RAILWAY_CLI_DEPLOY.md` step-by-step.
+10. Run live smoke tests against the deployed URL.
 
 ## 4) Debugging protocol
 
@@ -40,6 +42,7 @@ When something fails:
 - Fix root cause (avoid band-aids).
 - Add/extend a test to prevent regression.
 - Re-run local suite and live smoke tests.
+- For UI/UX issues, reproduce and validate fixes using the Playwright MCP.
 
 ## 5) Documentation rules
 
@@ -49,7 +52,7 @@ When something fails:
 
 ## 6) Quality gates (minimum)
 
-Before marking a feature “done”:
+Before marking a feature "done":
 
 - Matches `SPEC.md` acceptance criteria.
 - No obvious UI console errors (frontend projects).

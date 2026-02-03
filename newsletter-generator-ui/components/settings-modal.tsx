@@ -81,12 +81,40 @@ export function getPlayerSettings(): PlayerSettings {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (stored) {
     try {
-      return JSON.parse(stored)
+      const parsed = JSON.parse(stored)
+      // Migrate old data: ensure all players have explicit true/false values
+      let needsSave = false
+      for (const [vertical, players] of Object.entries(DEFAULT_PLAYERS)) {
+        if (!parsed[vertical]) {
+          parsed[vertical] = {}
+          needsSave = true
+        }
+        for (const player of players) {
+          if (parsed[vertical][player] === undefined) {
+            // Default to true for migration
+            parsed[vertical][player] = true
+            needsSave = true
+          }
+        }
+      }
+      if (needsSave) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+      }
+      return parsed
     } catch {
-      return {}
+      // Fall through to defaults
     }
   }
-  return {}
+  // Default: all players enabled for all verticals, save to localStorage
+  const defaults: PlayerSettings = {}
+  for (const [vertical, players] of Object.entries(DEFAULT_PLAYERS)) {
+    defaults[vertical] = {}
+    for (const player of players) {
+      defaults[vertical][player] = true
+    }
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults))
+  return defaults
 }
 
 export function getPlayerNames(): PlayerNames {
@@ -125,8 +153,10 @@ export function getActivePlayers(): { [vertical: string]: string[] } {
     const verticalNames = names[vertical] || {}
     result[vertical] = players
       .filter(player => {
-        // Default to enabled if not set
-        return verticalSettings[player] !== false
+        // Only include if explicitly set to true
+        // If no settings exist for this vertical, include none (user hasn't configured yet)
+        // If settings exist but player not in it, treat as disabled
+        return verticalSettings[player] === true
       })
       .map(player => {
         // Use custom name if set, otherwise original
@@ -183,7 +213,8 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   }
 
   const isPlayerEnabled = (vertical: string, player: string): boolean => {
-    return settings[vertical]?.[player] !== false
+    // Match getActivePlayers: only true if explicitly true
+    return settings[vertical]?.[player] === true
   }
 
   const getEnabledCount = (vertical: string): number => {

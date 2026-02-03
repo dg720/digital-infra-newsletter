@@ -91,6 +91,12 @@ async def generate_newsletter_stream(
                     "message": event.get("message", "Processing..."),
                     "status": event.get("status", "start"),
                 })
+            elif event_type == "debug":
+                yield sse_event("debug", {
+                    "category": event.get("category", "unknown"),
+                    "content": event.get("content", ""),
+                    "metadata": event.get("metadata", {}),
+                })
             elif event_type == "complete":
                 yield sse_event("complete", {
                     "newsletter_id": event.get("newsletter_id"),

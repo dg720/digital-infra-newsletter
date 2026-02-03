@@ -145,10 +145,12 @@ async def run_newsletter_generation_streaming(
     
     Yields dict events with format:
         {"type": "status", "step": str, "message": str}
+        {"type": "debug", "category": str, "content": str, "metadata": dict}
         {"type": "complete", "newsletter_id": str, "paths": dict}
         {"type": "error", "message": str}
     """
     from typing import AsyncGenerator
+    import time
     
     # Map node names to user-friendly step names and messages
     node_display = {
@@ -182,26 +184,97 @@ async def run_newsletter_generation_streaming(
         # Use astream_events to get real-time updates
         async for event in compiled.astream_events(initial_state, version="v2"):
             event_kind = event.get("event", "")
+            event_name = event.get("name", "")
             
             # Track node starts for progress updates
             if event_kind == "on_chain_start":
-                node_name = event.get("name", "")
-                if node_name in node_display and node_name not in seen_nodes:
-                    seen_nodes.add(node_name)
-                    step, message = node_display[node_name]
+                if event_name in node_display and event_name not in seen_nodes:
+                    seen_nodes.add(event_name)
+                    step, message = node_display[event_name]
                     yield {"type": "status", "step": step, "message": message, "status": "start"}
+                    yield {
+                        "type": "debug",
+                        "category": "node",
+                        "content": f"▶ Starting: {event_name}",
+                        "metadata": {"node": event_name, "action": "start"}
+                    }
             
             # Track node completions
             if event_kind == "on_chain_end":
-                node_name = event.get("name", "")
-                if node_name in node_display and node_name not in completed_nodes:
-                    completed_nodes.add(node_name)
-                    step, message = node_display[node_name]
+                if event_name in node_display and event_name not in completed_nodes:
+                    completed_nodes.add(event_name)
+                    step, message = node_display[event_name]
                     yield {"type": "status", "step": step, "message": f"Completed: {message}", "status": "complete"}
-                
-                if node_name == "LangGraph":
+                    yield {
+                        "type": "debug",
+                        "category": "node",
+                        "content": f"✓ Completed: {event_name}",
+                        "metadata": {"node": event_name, "action": "complete"}
+                    }
+                    
+                if event_name == "LangGraph":
                     # This is the final output
                     final_state = event.get("data", {}).get("output", {})
+            
+            # Capture tool calls - these show web searches and article fetches
+            if event_kind == "on_tool_start":
+                tool_name = event_name
+                tool_input = event.get("data", {}).get("input", {})
+                # Truncate long inputs for display
+                input_preview = str(tool_input)[:200] + "..." if len(str(tool_input)) > 200 else str(tool_input)
+                yield {
+                    "type": "debug",
+                    "category": "tool",
+                    "content": f"🔧 Tool: {tool_name}",
+                    "metadata": {"tool": tool_name, "input": input_preview, "action": "start"}
+                }
+            
+            if event_kind == "on_tool_end":
+                tool_name = event_name
+                tool_output = event.get("data", {}).get("output", "")
+                # Truncate long outputs
+                output_preview = str(tool_output)[:300] + "..." if len(str(tool_output)) > 300 else str(tool_output)
+                yield {
+                    "type": "debug",
+                    "category": "tool",
+                    "content": f"   └─ Result: {output_preview[:100]}...",
+                    "metadata": {"tool": tool_name, "output": output_preview, "action": "end"}
+                }
+            
+            # Capture LLM interactions
+            if event_kind == "on_chat_model_start":
+                model_name = event_name
+                yield {
+                    "type": "debug",
+                    "category": "llm",
+                    "content": f"🤖 LLM: {model_name} processing...",
+                    "metadata": {"model": model_name, "action": "start"}
+                }
+            
+            # NOTE: on_chat_model_stream disabled - too verbose, causes character-by-character display
+            # if event_kind == "on_chat_model_stream":
+            #     chunk = event.get("data", {}).get("chunk", {})
+            #     content = getattr(chunk, "content", "") if hasattr(chunk, "content") else ""
+            #     if content and len(content) > 0:
+            #         yield {
+            #             "type": "debug",
+            #             "category": "llm_stream",
+            #             "content": content,
+            #             "metadata": {"action": "stream"}
+            #         }
+            
+            if event_kind == "on_chat_model_end":
+                model_name = event_name
+                output = event.get("data", {}).get("output", {})
+                content = ""
+                if hasattr(output, "content"):
+                    content = output.content[:200] + "..." if len(output.content) > 200 else output.content
+                yield {
+                    "type": "debug",
+                    "category": "llm",
+                    "content": f"   └─ Response: {content[:100]}..." if content else "   └─ Response received",
+                    "metadata": {"model": model_name, "action": "end"}
+                }
         
         # Extract results and send completion
         if final_state:

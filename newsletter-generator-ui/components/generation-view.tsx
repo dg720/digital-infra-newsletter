@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,6 +16,7 @@ import { ChevronDown, Loader2, Sparkles, AlertCircle, CheckCircle } from "lucide
 import { useToast } from "@/hooks/use-toast"
 import { apiClient } from "@/lib/api"
 import { getActivePlayers, getReviewRounds } from "@/components/settings-modal"
+import { DebugTerminal, DebugEvent } from "@/components/debug-terminal"
 
 interface GenerationViewProps {
   onBack: () => void
@@ -56,6 +57,8 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
   const [isGenerating, setIsGenerating] = useState(false)
   const [steps, setSteps] = useState<StatusStep[]>(allSteps)
   const [error, setError] = useState<string | null>(null)
+  const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([])
+  const debugIdCounter = useRef(0)
 
   const [verticals, setVerticals] = useState({
     dataCenters: true,
@@ -134,6 +137,22 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
     updateStep(frontendStep, frontendStatus)
   }
 
+  const handleDebugEvent = useCallback((category: string, content: string, metadata: Record<string, unknown>) => {
+    const newEvent: DebugEvent = {
+      id: `debug-${debugIdCounter.current++}`,
+      timestamp: new Date(),
+      category: category as DebugEvent['category'],
+      content,
+      metadata,
+    }
+    setDebugEvents(prev => [...prev, newEvent])
+  }, [])
+
+  const clearDebugEvents = useCallback(() => {
+    setDebugEvents([])
+    debugIdCounter.current = 0
+  }, [])
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast({
@@ -146,6 +165,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
 
     setIsGenerating(true)
     setError(null)
+    clearDebugEvents() // Clear previous events
     // Filter steps based on selected verticals
     const filteredSteps = getFilteredSteps(verticals)
     setSteps(filteredSteps.map(s => ({ ...s, status: 'pending' as const })))
@@ -161,6 +181,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       const response = await apiClient.generateNewsletterStreaming(
         { prompt: fullPrompt, max_review_rounds: reviewRounds, active_players: activePlayers },
         handleStatusUpdate,
+        handleDebugEvent,
       )
 
       // Mark all steps complete
@@ -400,6 +421,17 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Debug Terminal - show during/after generation if there are events */}
+      {(isGenerating || debugEvents.length > 0) && (
+        <div className="mb-8">
+          <DebugTerminal 
+            events={debugEvents}
+            onClear={clearDebugEvents}
+            isGenerating={isGenerating}
+          />
         </div>
       )}
 
