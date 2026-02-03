@@ -372,3 +372,20 @@ async def list_newsletters():
     store = ArtifactStore()
     issues = store.list_issues()
     return {"newsletters": issues, "count": len(issues)}
+
+
+@app.delete("/newsletter/{newsletter_id}")
+async def delete_newsletter(newsletter_id: str):
+    """
+    Delete a newsletter issue and all its artifacts.
+    """
+    store = ArtifactStore()
+    
+    if not store.read_newsletter(newsletter_id):
+        raise HTTPException(status_code=404, detail=f"Newsletter {newsletter_id} not found")
+    
+    deleted = store.delete_issue(newsletter_id)
+    if deleted:
+        return {"status": "deleted", "newsletter_id": newsletter_id}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to delete newsletter")

@@ -15,7 +15,7 @@ import {
 import { ChevronDown, Loader2, Sparkles, AlertCircle, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiClient } from "@/lib/api"
-import { getActivePlayers } from "@/components/settings-modal"
+import { getActivePlayers, getReviewRounds } from "@/components/settings-modal"
 
 interface GenerationViewProps {
   onBack: () => void
@@ -30,7 +30,7 @@ interface StatusStep {
   status: 'pending' | 'active' | 'complete'
 }
 
-const initialSteps: StatusStep[] = [
+const allSteps: StatusStep[] = [
   { id: 'manager', label: 'Parsing request', status: 'pending' },
   { id: 'research_dc', label: 'Researching Data Centers', status: 'pending' },
   { id: 'research_cf', label: 'Researching Connectivity', status: 'pending' },
@@ -40,11 +40,21 @@ const initialSteps: StatusStep[] = [
   { id: 'assemble', label: 'Assembling newsletter', status: 'pending' },
 ]
 
+// Get filtered steps based on selected verticals
+const getFilteredSteps = (selectedVerticals: {dataCenters: boolean, connectivity: boolean, towers: boolean}): StatusStep[] => {
+  return allSteps.filter(step => {
+    if (step.id === 'research_dc' && !selectedVerticals.dataCenters) return false
+    if (step.id === 'research_cf' && !selectedVerticals.connectivity) return false
+    if (step.id === 'research_tw' && !selectedVerticals.towers) return false
+    return true
+  })
+}
+
 export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStart, isVisible = true }: GenerationViewProps) {
   const [prompt, setPrompt] = useState("")
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [steps, setSteps] = useState<StatusStep[]>(initialSteps)
+  const [steps, setSteps] = useState<StatusStep[]>(allSteps)
   const [error, setError] = useState<string | null>(null)
 
   const [verticals, setVerticals] = useState({
@@ -136,16 +146,20 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
 
     setIsGenerating(true)
     setError(null)
-    setSteps(initialSteps.map(s => ({ ...s, status: 'pending' as const })))
+    // Filter steps based on selected verticals
+    const filteredSteps = getFilteredSteps(verticals)
+    setSteps(filteredSteps.map(s => ({ ...s, status: 'pending' as const })))
     onGenerationStart?.()
 
     try {
       const fullPrompt = buildPrompt()
       
-      // Try streaming first, fall back to regular if not available
+      // Get settings
       const activePlayers = getActivePlayers()
+      const reviewRounds = getReviewRounds()
+      
       const response = await apiClient.generateNewsletterStreaming(
-        { prompt: fullPrompt, max_review_rounds: 2, active_players: activePlayers },
+        { prompt: fullPrompt, max_review_rounds: reviewRounds, active_players: activePlayers },
         handleStatusUpdate,
       )
 
@@ -162,9 +176,11 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       // Fallback to non-streaming on error
       try {
         const fullPrompt = buildPrompt()
+        const reviewRounds = getReviewRounds()
+        const filteredSteps = getFilteredSteps(verticals)
         
         // Simulate step progress for non-streaming
-        for (const step of initialSteps) {
+        for (const step of filteredSteps) {
           updateStep(step.id, 'active')
           await new Promise(r => setTimeout(r, 2000))
           updateStep(step.id, 'complete')
@@ -172,7 +188,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
         
         const response = await apiClient.generateNewsletter({
           prompt: fullPrompt,
-          max_review_rounds: 2,
+          max_review_rounds: reviewRounds,
         })
 
         toast({

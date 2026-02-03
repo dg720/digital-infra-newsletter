@@ -220,3 +220,17 @@ class ArtifactStore:
         if not self.base_dir.exists():
             return []
         return [d.name for d in self.base_dir.iterdir() if d.is_dir()]
+    
+    def delete_issue(self, newsletter_id: str) -> bool:
+        """
+        Delete a newsletter issue and all its artifacts.
+        
+        Returns:
+            True if deleted, False if not found.
+        """
+        import shutil
+        issue_dir = self.base_dir / newsletter_id
+        if issue_dir.exists() and issue_dir.is_dir():
+            shutil.rmtree(issue_dir)
+            return True
+        return False

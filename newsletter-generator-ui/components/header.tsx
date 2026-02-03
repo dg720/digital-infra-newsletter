@@ -47,12 +47,12 @@ export function Header({ view, onBackToDashboard, onStartGeneration }: HeaderPro
             
             <Button
               variant="ghost"
-              size="icon"
+              size="sm"
               onClick={() => setSettingsOpen(true)}
-              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
             >
               <Settings className="h-4 w-4" />
-              <span className="sr-only">Settings</span>
+              <span className="text-sm">Config</span>
             </Button>
           </div>
         </div>

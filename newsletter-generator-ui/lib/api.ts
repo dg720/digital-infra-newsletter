@@ -284,6 +284,19 @@ class ApiClient {
       `evidence/${sectionId}_pack.json`
     );
   }
+
+  async deleteNewsletter(newsletterId: string): Promise<{ status: string; newsletter_id: string }> {
+    const response = await fetch(`${this.baseUrl}/newsletter/${newsletterId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to delete newsletter');
+    }
+
+    return response.json();
+  }
 }
 
 // Singleton instance
@@ -315,18 +328,65 @@ export function convertToUIFormat(
       return { bigPicture: '', bullets: [], evidence: [] };
     }
 
-    return {
-      bigPicture: section.big_picture,
-      bullets: section.bullets.map((b) => ({
-        text: b.text,
+    // Collect all referenced evidence IDs in order of appearance
+    const allReferencedIds: string[] = [...(section.big_picture_evidence_ids || [])];
+    for (const b of section.bullets) {
+      allReferencedIds.push(...(b.evidence_ids || []));
+    }
+    // Remove duplicates while preserving order
+    const uniqueIds = [...new Set(allReferencedIds)];
+    const idToNum: Record<string, number> = {};
+    uniqueIds.forEach((id, idx) => {
+      idToNum[id] = idx + 1;
+    });
+
+    // Helper to strip evidence ID patterns like (ev_xxx) from text
+    const stripEvidenceIds = (text: string): string => {
+      return text
+        .replace(/\s*\(ev_[a-f0-9]+\)/gi, '')  // Remove (ev_xxx) patterns
+        .replace(/\s*ev_[a-f0-9]+/gi, '')      // Remove standalone ev_xxx
+        .trim();
+    };
+
+    // Build big picture with citations appended
+    const cleanBigPicture = stripEvidenceIds(section.big_picture);
+    const bpCiteNums = (section.big_picture_evidence_ids || [])
+      .slice(0, 3)
+      .map(id => idToNum[id])
+      .filter(Boolean);
+    const bigPictureWithCites = cleanBigPicture + 
+      (bpCiteNums.length > 0 ? ' ' + bpCiteNums.map(n => `[${n}]`).join('') : '');
+
+    // Build bullets with citations appended to text
+    const bulletsWithCites = section.bullets.map((b) => {
+      const cleanText = stripEvidenceIds(b.text);
+      const citeNums = (b.evidence_ids || [])
+        .slice(0, 2)
+        .map(id => idToNum[id])
+        .filter(Boolean);
+      const textWithCite = cleanText + 
+        (citeNums.length > 0 ? ' ' + citeNums.map(n => `[${n}]`).join('') : '');
+      return {
+        text: textWithCite,
         evidenceId: b.evidence_ids[0] || '',
-      })),
-      evidence: evidencePack?.items.map((e) => ({
+      };
+    });
+
+    // Only include evidence items that are actually referenced
+    const referencedEvidence = (evidencePack?.items || [])
+      .filter(e => uniqueIds.includes(e.evidence_id))
+      .sort((a, b) => (idToNum[a.evidence_id] || 999) - (idToNum[b.evidence_id] || 999))
+      .map((e) => ({
         id: e.evidence_id,
         title: e.title || 'Source',
         source: e.source_name,
         url: e.url || '#',
-      })) || [],
+      }));
+
+    return {
+      bigPicture: bigPictureWithCites,
+      bullets: bulletsWithCites,
+      evidence: referencedEvidence,
     };
   };
 

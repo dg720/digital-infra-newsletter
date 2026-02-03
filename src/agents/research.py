@@ -23,9 +23,11 @@ Your task is to research recent news and developments in the {vertical_name} sec
 ## Your Mission
 1. Analyze the provided evidence about {vertical_name} news
 2. Draft a big-picture paragraph summarizing key themes (80-140 words)
-3. Create up to 5 bullet points highlighting major player updates
+3. Create EXACTLY {bullet_count} bullet points - no more, no less
 
-## Major Players to Prioritize
+## CRITICAL CONSTRAINTS
+- You MUST create exactly {bullet_count} bullets. Not 3, not 5 - EXACTLY {bullet_count}.
+- ONLY reference the following companies. Do NOT mention any other companies:
 {major_players}
 
 ## Guidelines
@@ -37,7 +39,7 @@ Your task is to research recent news and developments in the {vertical_name} sec
 {style_instructions}
 
 ## Output Format
-Respond with a JSON object:
+Respond with a JSON object containing EXACTLY {bullet_count} bullets:
 {{
   "big_picture": "Your 80-140 word summary paragraph here...",
   "big_picture_evidence_ids": ["ev_xxx", "ev_yyy"],
@@ -198,8 +200,18 @@ async def _draft_section(
         temperature=0.3,
     )
     
-    # Build prompt
-    major_players_str = "\n".join(f"- {p}" for p in MAJOR_PLAYERS.get(vertical, []))
+    # Get active players for this vertical - use state.comps if set, otherwise MAJOR_PLAYERS
+    section_id = vertical.value
+    if state.comps and section_id in state.comps:
+        active_players = state.comps[section_id]
+    else:
+        active_players = MAJOR_PLAYERS.get(vertical, [])
+    
+    # Bullet count matches the number of active players (max 5)
+    bullet_count = min(len(active_players), 5) if active_players else 5
+    
+    # Build prompt using active players, not all players
+    major_players_str = "\n".join(f"- {p}" for p in active_players)
     
     style_instructions = ""
     if state.style_prompt:
@@ -220,6 +232,7 @@ async def _draft_section(
     prompt = RESEARCH_AGENT_PROMPT.format(
         vertical_name=VERTICAL_DISPLAY_NAMES.get(vertical, vertical.value),
         major_players=major_players_str,
+        bullet_count=bullet_count,
         start_date=state.time_window.start.isoformat(),
         end_date=state.time_window.end.isoformat(),
         voice_profile=state.voice_profile,
@@ -252,9 +265,9 @@ async def _draft_section(
             risk_flags=["LLM response parsing failed"],
         )
     
-    # Build bullets
+    # Build bullets - limit to bullet_count
     bullets = []
-    for b in parsed.get("bullets", [])[:5]:  # Max 5 bullets
+    for b in parsed.get("bullets", [])[:bullet_count]:
         bullets.append(Bullet(
             text=b.get("text", ""),
             evidence_ids=b.get("evidence_ids", []),
@@ -268,3 +281,4 @@ async def _draft_section(
         bullets=bullets,
         risk_flags=parsed.get("risk_flags", []),
     )
+

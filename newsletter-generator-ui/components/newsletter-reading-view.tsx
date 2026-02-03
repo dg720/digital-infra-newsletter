@@ -96,7 +96,7 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
 
   useEffect(() => {
     if (highlightedSection) {
-      const timer = setTimeout(() => setHighlightedSection(null), 3000)
+      const timer = setTimeout(() => setHighlightedSection(null), 5000)
       return () => clearTimeout(timer)
     }
   }, [highlightedSection])
@@ -255,42 +255,103 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
           </h2>
         </div>
 
-        {section.bigPicture && (
-          <p className="mb-5 text-base leading-relaxed text-foreground/90">
-            {section.bigPicture}
-          </p>
-        )}
+        {section.bigPicture && (() => {
+          // Extract citation numbers and make them clickable
+          const citationMatch = section.bigPicture.match(/\[\d+\]/g)
+          const cleanText = section.bigPicture.replace(/\s*\[\d+\]+/g, '')
+          
+          return (
+            <p className="mb-5 text-base leading-relaxed text-foreground/90">
+              {cleanText}
+              {citationMatch && citationMatch.map((cite, i) => {
+                const num = parseInt(cite.replace(/[\[\]]/g, ''), 10)
+                const evidence = section.evidence[num - 1]
+                if (evidence?.url) {
+                  return (
+                    <a 
+                      key={i}
+                      href={evidence.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="ml-0.5 text-xs font-medium text-primary hover:underline"
+                    >
+                      [{num}]
+                    </a>
+                  )
+                }
+                return (
+                  <sup key={i} className="ml-0.5 text-xs font-medium text-muted-foreground">
+                    [{num}]
+                  </sup>
+                )
+              })}
+            </p>
+          )
+        })()}
 
         {section.bullets.length > 0 && (
           <ul className="space-y-3">
-            {section.bullets.map((bullet, index) => (
-              <li key={index} className="flex gap-3 text-sm leading-relaxed text-foreground/80">
-                <span className="mt-2 h-1 w-1 flex-shrink-0 rounded-full bg-muted-foreground/50" />
-                <span>
-                  {bullet.text}
-                  {bullet.evidenceId && (
-                    <sup className="ml-1 text-[10px] font-medium text-muted-foreground">
-                      [{bullet.evidenceId}]
-                    </sup>
-                  )}
-                </span>
-              </li>
-            ))}
+            {section.bullets.map((bullet, index) => {
+              // Extract citation numbers from text and match to evidence URLs
+              const citationMatch = bullet.text.match(/\[\d+\]/g)
+              const cleanText = bullet.text.replace(/\s*\[\d+\]+/g, '')
+              
+              return (
+                <li key={index} className="flex gap-3 text-sm leading-relaxed text-foreground/80">
+                  <span className="mt-2 h-1 w-1 flex-shrink-0 rounded-full bg-muted-foreground/50" />
+                  <span>
+                    {cleanText}
+                    {citationMatch && citationMatch.map((cite, i) => {
+                      const num = parseInt(cite.replace(/[\[\]]/g, ''), 10)
+                      const evidence = section.evidence[num - 1] // Citations are 1-indexed
+                      if (evidence?.url) {
+                        return (
+                          <a 
+                            key={i}
+                            href={evidence.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="ml-0.5 text-[10px] font-medium text-primary hover:underline"
+                          >
+                            [{num}]
+                          </a>
+                        )
+                      }
+                      return (
+                        <sup key={i} className="ml-0.5 text-[10px] font-medium text-muted-foreground">
+                          [{num}]
+                        </sup>
+                      )
+                    })}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         )}
 
         {section.evidence.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            {section.evidence.map((e) => (
-              <Badge
-                key={e.id}
-                variant="outline"
-                className="cursor-help border-muted bg-transparent px-2 py-0.5 text-[10px] font-normal text-muted-foreground hover:border-primary/30"
-                title={`${e.title} — ${e.source}`}
-              >
-                {e.id}
-              </Badge>
-            ))}
+          <div className="mt-4 pt-3 border-t border-border">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Sources</p>
+            <div className="flex flex-col gap-1">
+              {section.evidence.map((e, idx) => (
+                <div key={e.id} className="text-xs text-muted-foreground">
+                  <span className="font-medium">[{idx + 1}]</span>{' '}
+                  {e.url ? (
+                    <a 
+                      href={e.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {e.title || e.source}
+                    </a>
+                  ) : (
+                    <span>{e.title || e.source}</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
         </div>
@@ -320,8 +381,12 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
                 year: "numeric",
               })}
             </span>
-            <span className="text-border">|</span>
-            <span className="capitalize">{newsletter.voiceProfile} voice</span>
+            {newsletter.voiceProfile !== 'expert_operator' && (
+              <>
+                <span className="text-border">|</span>
+                <span className="capitalize">{newsletter.voiceProfile.replace(/_/g, ' ')} voice</span>
+              </>
+            )}
             <span className="text-border">|</span>
             <span>{newsletter.regions.join(", ")}</span>
           </div>
