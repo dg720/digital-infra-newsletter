@@ -26,6 +26,7 @@ async def manager_init_node(state: Dict[str, Any]) -> Dict[str, Any]:
     active_players = state.get("active_players", None)
     requested_verticals = state.get("verticals", None)
     search_provider = state.get("search_provider", None)
+    strict_date_filtering = state.get("strict_date_filtering", None)
     time_window = state.get("time_window")
     region_focus = state.get("region_focus")
     voice_profile = state.get("voice_profile")
@@ -89,6 +90,8 @@ async def manager_init_node(state: Dict[str, Any]) -> Dict[str, Any]:
 
     if search_provider:
         newsletter_state.search_provider = search_provider
+    if strict_date_filtering is not None:
+        newsletter_state.strict_date_filtering = strict_date_filtering
 
     return {"newsletter_state": newsletter_state.model_dump()}
 

@@ -1,15 +1,20 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2, Sparkles, AlertCircle, CheckCircle } from "lucide-react"
+import { Loader2, Sparkles, AlertCircle, CheckCircle, ChevronDown } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { apiClient } from "@/lib/api"
-import { getActivePlayers, getReviewRounds, getSearchProvider } from "@/components/settings-modal"
+import { getActivePlayers, getReviewRounds, getSearchProvider, getStrictDateFiltering } from "@/components/settings-modal"
 import { DebugTerminal, DebugEvent } from "@/components/debug-terminal"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 interface GenerationViewProps {
   onBack: () => void
@@ -50,6 +55,12 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
   const [error, setError] = useState<string | null>(null)
   const [debugEvents, setDebugEvents] = useState<DebugEvent[]>([])
   const debugIdCounter = useRef(0)
+  const [lastNewsletterId, setLastNewsletterId] = useState<string | null>(null)
+  const [readyNewsletterId, setReadyNewsletterId] = useState<string | null>(null)
+  const [generatedVerticalIds, setGeneratedVerticalIds] = useState<string[]>([])
+  const [debugSourcesOpen, setDebugSourcesOpen] = useState(false)
+  const [debugSourcesLoading, setDebugSourcesLoading] = useState(false)
+  const [debugSources, setDebugSources] = useState<Record<string, { title: string; url: string; publishDate?: string }[]>>({})
 
   const [verticals, setVerticals] = useState({
     dataCenters: true,
@@ -65,6 +76,18 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
   const [regions, setRegions] = useState<string[]>(["UK", "EU"])
   const { toast } = useToast()
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  const selectedVerticalIds = useMemo(() => ([
+    ...(verticals.dataCenters ? ["data_centers"] : []),
+    ...(verticals.connectivity ? ["connectivity_fibre"] : []),
+    ...(verticals.towers ? ["towers_wireless"] : []),
+  ]), [verticals])
+
+  const verticalLabels: Record<string, string> = {
+    data_centers: "Data Centers",
+    connectivity_fibre: "Connectivity & Fibre",
+    towers_wireless: "Towers & Wireless",
+  }
 
 
   const updateStep = (stepId: string, status: 'active' | 'complete') => {
@@ -120,6 +143,29 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
     debugIdCounter.current = 0
   }, [])
 
+  const loadDebugSources = useCallback(async (newsletterId: string, verticalIds: string[]) => {
+    if (!newsletterId || verticalIds.length === 0) return
+    setDebugSourcesLoading(true)
+    try {
+      const results: Record<string, { title: string; url: string; publishDate?: string }[]> = {}
+      for (const sectionId of verticalIds) {
+        try {
+          const pack = await apiClient.getEvidencePack(newsletterId, sectionId)
+          results[sectionId] = (pack.items || []).map((item) => ({
+            title: item.title || "Source",
+            url: item.url || "#",
+            publishDate: item.data?.publish_date,
+          }))
+        } catch {
+          results[sectionId] = []
+        }
+      }
+      setDebugSources(results)
+    } finally {
+      setDebugSourcesLoading(false)
+    }
+  }, [])
+
   const handleGenerate = async () => {
     const hasVerticals = verticals.dataCenters || verticals.connectivity || verticals.towers
     if (!hasVerticals) {
@@ -133,6 +179,9 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
 
     setIsGenerating(true)
     setError(null)
+    setLastNewsletterId(null)
+    setReadyNewsletterId(null)
+    setGeneratedVerticalIds([])
     clearDebugEvents() // Clear previous events
     // Filter steps based on selected verticals
     const filteredSteps = getFilteredSteps(verticals)
@@ -148,11 +197,8 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
       const activePlayers = getActivePlayers()
       const reviewRounds = getReviewRounds()
       const searchProvider = getSearchProvider()
-      const verticalIds = [
-        ...(verticals.dataCenters ? ["data_centers"] : []),
-        ...(verticals.connectivity ? ["connectivity_fibre"] : []),
-        ...(verticals.towers ? ["towers_wireless"] : []),
-      ]
+      const strictDateFiltering = getStrictDateFiltering()
+      const verticalIds = selectedVerticalIds
       
       const response = await apiClient.generateNewsletterStreaming(
         { 
@@ -162,6 +208,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
           active_players: activePlayers, 
           verticals: verticalIds,
           search_provider: searchProvider,
+          strict_date_filtering: strictDateFiltering,
         },
         handleStatusUpdate,
         handleDebugEvent,
@@ -175,7 +222,11 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
         description: "Your newsletter is ready to view",
       })
 
-      onNewsletterGenerated(response.newsletter_id)
+      setLastNewsletterId(response.newsletter_id)
+      setReadyNewsletterId(response.newsletter_id)
+      setGeneratedVerticalIds(verticalIds)
+      setDebugSources({})
+      setDebugSourcesOpen(false)
     } catch (err) {
       // Fallback to non-streaming on error
       try {
@@ -185,11 +236,8 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
         const reviewRounds = getReviewRounds()
         const activePlayers = getActivePlayers()
         const searchProvider = getSearchProvider()
-        const verticalIds = [
-          ...(verticals.dataCenters ? ["data_centers"] : []),
-          ...(verticals.connectivity ? ["connectivity_fibre"] : []),
-          ...(verticals.towers ? ["towers_wireless"] : []),
-        ]
+        const strictDateFiltering = getStrictDateFiltering()
+        const verticalIds = selectedVerticalIds
         const filteredSteps = getFilteredSteps(verticals)
         
         // Simulate step progress for non-streaming
@@ -206,6 +254,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
           active_players: activePlayers,
           verticals: verticalIds,
           search_provider: searchProvider,
+          strict_date_filtering: strictDateFiltering,
         })
 
         toast({
@@ -213,7 +262,11 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
           description: "Your newsletter is ready to view",
         })
 
-        onNewsletterGenerated(response.newsletter_id)
+        setLastNewsletterId(response.newsletter_id)
+        setReadyNewsletterId(response.newsletter_id)
+        setGeneratedVerticalIds(verticalIds)
+        setDebugSources({})
+        setDebugSourcesOpen(false)
       } catch (fallbackErr) {
         const message = fallbackErr instanceof Error ? fallbackErr.message : "Failed to generate newsletter"
         setError(message)
@@ -393,7 +446,7 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
 
       {/* Debug Terminal - show during/after generation if there are events */}
       {(isGenerating || debugEvents.length > 0) && (
-        <div className="mb-8">
+        <div className="mb-6">
           <DebugTerminal 
             events={debugEvents}
             onClear={clearDebugEvents}
@@ -402,8 +455,98 @@ export function GenerationView({ onBack, onNewsletterGenerated, onGenerationStar
         </div>
       )}
 
+      {lastNewsletterId && !isGenerating && (
+        <div className="mb-8">
+          <Collapsible
+            open={debugSourcesOpen}
+            onOpenChange={(open) => {
+              setDebugSourcesOpen(open)
+              if (open && Object.keys(debugSources).length === 0) {
+                void loadDebugSources(lastNewsletterId, generatedVerticalIds.length > 0 ? generatedVerticalIds : selectedVerticalIds)
+              }
+            }}
+          >
+            <CollapsibleTrigger asChild>
+              <button className="group flex items-center gap-2 text-xs text-muted-foreground/80 transition-colors hover:text-muted-foreground">
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform duration-200 ${debugSourcesOpen ? "rotate-180" : ""}`}
+                />
+                <span>Debug sources</span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <div className="rounded-md border border-border/60 bg-muted/20 px-4 py-3">
+                {debugSourcesLoading ? (
+                  <div className="text-xs text-muted-foreground">Loading sources...</div>
+                ) : (
+                  <div className="space-y-4">
+                    {(generatedVerticalIds.length > 0 ? generatedVerticalIds : selectedVerticalIds).map((sectionId) => (
+                      <div key={sectionId} className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+                          {verticalLabels[sectionId] || sectionId}
+                        </div>
+                        <div className="space-y-2">
+                          {(debugSources[sectionId] || []).length === 0 ? (
+                            <div className="text-xs text-muted-foreground">No sources found.</div>
+                          ) : (
+                            (debugSources[sectionId] || []).map((item, idx) => {
+                              const dateLabel = item.publishDate
+                                ? new Date(item.publishDate).toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "Unknown date";
+                              return (
+                                <div key={`${sectionId}-${idx}`} className="text-xs text-muted-foreground">
+                                  <div className="font-medium text-foreground/90">
+                                    {item.title}
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-2 gap-y-1 text-muted-foreground/80">
+                                    <span>{dateLabel}</span>
+                                    {item.url && item.url !== "#" && (
+                                      <>
+                                        <span className="text-border">|</span>
+                                        <a
+                                          href={item.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-primary hover:underline"
+                                        >
+                                          {item.url}
+                                        </a>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
+
       {/* Primary CTA */}
       <div className="flex flex-col items-end gap-3">
+        {readyNewsletterId && !isGenerating && (
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => {
+              onNewsletterGenerated(readyNewsletterId)
+            }}
+            className="gap-2 px-6"
+          >
+            View Newsletter
+          </Button>
+        )}
         <Button
           onClick={handleGenerate}
           disabled={isGenerating || !(verticals.dataCenters || verticals.connectivity || verticals.towers)}

@@ -78,6 +78,7 @@ const STORAGE_KEY = "newsletter-player-settings"
 const NAMES_STORAGE_KEY = "newsletter-player-names"
 const REVIEW_ROUNDS_KEY = "newsletter-review-rounds"
 const SEARCH_PROVIDER_KEY = "newsletter-search-provider"
+const STRICT_DATES_KEY = "newsletter-strict-dates"
 
 export function getPlayerSettings(): PlayerSettings {
   if (typeof window === "undefined") return {}
@@ -155,6 +156,13 @@ export function getSearchProvider(): SearchProvider {
   return "openai"
 }
 
+export function getStrictDateFiltering(): boolean {
+  if (typeof window === "undefined") return true
+  const stored = localStorage.getItem(STRICT_DATES_KEY)
+  if (stored === null) return true
+  return stored === "true"
+}
+
 export function getActivePlayers(): { [vertical: string]: string[] } {
   const settings = getPlayerSettings()
   const names = getPlayerNames()
@@ -190,6 +198,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const [names, setNames] = useState<PlayerNames>({})
   const [reviewRounds, setReviewRounds] = useState(2)
   const [searchProvider, setSearchProvider] = useState<SearchProvider>("openai")
+  const [strictDates, setStrictDates] = useState(true)
   const [editingPlayer, setEditingPlayer] = useState<{vertical: string, player: string} | null>(null)
   const [editValue, setEditValue] = useState("")
 
@@ -198,6 +207,7 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     setNames(getPlayerNames())
     setReviewRounds(getReviewRounds())
     setSearchProvider(getSearchProvider())
+    setStrictDates(getStrictDateFiltering())
   }, [open])
 
   const handleToggle = (vertical: string, player: string, enabled: boolean) => {
@@ -283,6 +293,11 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
     localStorage.setItem(SEARCH_PROVIDER_KEY, provider)
   }
 
+  const handleStrictDatesChange = (enabled: boolean) => {
+    setStrictDates(enabled)
+    localStorage.setItem(STRICT_DATES_KEY, String(enabled))
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
@@ -359,6 +374,19 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
                   Tavily
                 </Button>
               </div>
+            </div>
+          </div>
+
+          {/* Strict Date Filtering */}
+          <div className="rounded-lg border border-border p-4 bg-muted/30">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label className="text-sm font-medium">Strict Date Filtering</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Only include sources with explicit publish dates inside the time window.
+                </p>
+              </div>
+              <Switch checked={strictDates} onCheckedChange={handleStrictDatesChange} />
             </div>
           </div>
 

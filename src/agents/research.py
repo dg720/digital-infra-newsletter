@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 from datetime import date, datetime
+import re
 import asyncio
 import json
 
@@ -130,6 +131,7 @@ async def research_vertical(
     # Generate and execute search queries
     queries = generate_search_queries(vertical, state)
     time_window_days = state.time_window.days() + 1  # Include buffer
+    strict_dates = state.strict_date_filtering
     
     call_count = 0
     max_calls = state.evidence_budgets.get(section_id, 12)
@@ -157,6 +159,14 @@ async def research_vertical(
         
         for results in search_results_list:
             for item in results:
+                _ensure_publish_date(item)
+                if _is_outside_time_window(
+                    item,
+                    state.time_window.start,
+                    state.time_window.end,
+                    require_publish_date=strict_dates,
+                ):
+                    continue
                 evidence_pack.add_item(item)
 
     # 2. Parallelize Article Fetching + Date Filtering
@@ -187,11 +197,12 @@ async def research_vertical(
             for item in fetched_items:
                 if not item:
                     continue
+                _ensure_publish_date(item)
                 if _is_outside_time_window(
                     item,
                     state.time_window.start,
                     state.time_window.end,
-                    require_publish_date=True,
+                    require_publish_date=strict_dates,
                 ):
                     if item.url:
                         excluded_urls.add(item.url)
@@ -205,7 +216,10 @@ async def research_vertical(
                     for existing in evidence_pack.items
                     if existing.url not in excluded_urls
                     and not _is_outside_time_window(
-                        existing, state.time_window.start, state.time_window.end
+                        existing,
+                        state.time_window.start,
+                        state.time_window.end,
+                        require_publish_date=strict_dates,
                     )
                 ]
     
@@ -228,6 +242,108 @@ def _parse_publish_date(value: str | None) -> Optional[date]:
             return date.fromisoformat(value)
         except ValueError:
             return None
+    return None
+
+
+def _infer_publish_date_from_text(text: str | None) -> Optional[date]:
+    if not text:
+        return None
+    # Look for phrases like "Published 29 Jan 2023" or "Written Jan 29, 2023"
+    month_names = (
+        "January|February|March|April|May|June|July|August|September|October|November|December|"
+        "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec"
+    )
+    patterns = [
+        rf"(Published|Updated|Written|Posted|Date|On|Last\s+updated|Last\s+modified)\s*[:\-]?\s*(\d{{1,2}})(?:st|nd|rd|th)?\s+({month_names})\s+(20\d{{2}})",
+        rf"(Published|Updated|Written|Posted|Date|On|Last\s+updated|Last\s+modified)\s*[:\-]?\s*({month_names})\s+(\d{{1,2}})(?:st|nd|rd|th)?,\s*(20\d{{2}})",
+        rf"(Published|Updated|Written|Posted|Date|On|Last\s+updated|Last\s+modified)\s*[:\-]?\s*(\d{{1,2}})(?:st|nd|rd|th)?\s+({month_names})\s+(20\d{{2}})\s+\d{{1,2}}:\d{{2}}",
+        rf"(Published|Updated|Written|Posted|Date|On|Last\s+updated|Last\s+modified)\s*[:\-]?\s*({month_names})\s+(\d{{1,2}})(?:st|nd|rd|th)?,\s*(20\d{{2}})\s+\d{{1,2}}:\d{{2}}",
+        rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+({month_names})\s+(20\d{{2}})\b",
+        rf"\b({month_names})\s+(\d{{1,2}})(?:st|nd|rd|th)?,\s*(20\d{{2}})\b",
+        rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+({month_names})\s+(20\d{{2}})\s+\d{{1,2}}:\d{{2}}\b",
+        rf"\b({month_names})\s+(\d{{1,2}})(?:st|nd|rd|th)?,\s*(20\d{{2}})\s+\d{{1,2}}:\d{{2}}\b",
+        r"\b(20\d{2})[/-](0[1-9]|1[0-2])[/-](0[1-9]|[12]\d|3[01])\b",
+        r"\b(20\d{2})\.(0[1-9]|1[0-2])\.(0[1-9]|[12]\d|3[01])\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        parts = match.groups()
+        # Normalize to day, month, year order
+        if pattern.startswith("(Published") or pattern.startswith("(Updated") or pattern.startswith("(Written") or pattern.startswith("(Posted") or pattern.startswith("(Date") or pattern.startswith("(On") or pattern.startswith("(Last"):
+            if parts[1].isdigit():
+                day = parts[1]
+                month = parts[2]
+                year = parts[3]
+            else:
+                month = parts[1]
+                day = parts[2]
+                year = parts[3]
+        elif pattern.startswith(r"\b(20"):
+            year, month, day = parts[0], parts[1], parts[2]
+        else:
+            if parts[0].isdigit():
+                day = parts[0]
+                month = parts[1]
+                year = parts[2]
+            else:
+                month = parts[0]
+                day = parts[1]
+                year = parts[2]
+        try:
+            # Try full month name first, then abbreviated
+            for fmt in ("%d %B %Y", "%d %b %Y"):
+                try:
+                    return datetime.strptime(f"{day} {month} {year}", fmt).date()
+                except ValueError:
+                    continue
+        except Exception:
+            continue
+    return None
+
+
+def _infer_publish_date_for_item(item: EvidenceItem) -> Optional[date]:
+    inferred = _infer_publish_date_from_text(item.text)
+    if inferred:
+        return inferred
+    inferred = _infer_publish_date_from_text(item.title)
+    if inferred:
+        return inferred
+    return None
+
+
+def _extract_publish_date_from_data(item: EvidenceItem) -> Optional[date]:
+    if not item.data or not isinstance(item.data, dict):
+        return None
+    for key in ("publish_date", "published_date", "published", "date", "updated", "last_updated"):
+        value = item.data.get(key)
+        if isinstance(value, str):
+            parsed = _parse_publish_date(value)
+            if parsed:
+                return parsed
+    return None
+
+
+def _ensure_publish_date(item: EvidenceItem) -> Optional[date]:
+    publish_date = _extract_publish_date_from_data(item)
+    if publish_date:
+        return publish_date
+    inferred = _infer_publish_date_for_item(item)
+    if inferred:
+        if item.data is None:
+            item.data = {}
+        if isinstance(item.data, dict):
+            item.data["publish_date"] = inferred.isoformat()
+        return inferred
+    return None
+
+
+def _get_publish_date(item: EvidenceItem) -> Optional[date]:
+    publish_date = _extract_publish_date_from_data(item)
+    if publish_date:
+        return publish_date
+    return _infer_publish_date_for_item(item)
 
 
 def _is_outside_time_window(
@@ -236,9 +352,7 @@ def _is_outside_time_window(
     end: date,
     require_publish_date: bool = False,
 ) -> bool:
-    publish_date = None
-    if item.data and isinstance(item.data, dict):
-        publish_date = _parse_publish_date(item.data.get("publish_date"))
+    publish_date = _get_publish_date(item)
     if not publish_date:
         return require_publish_date
     return publish_date < start or publish_date > end

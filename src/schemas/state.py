@@ -98,6 +98,10 @@ class NewsletterState(BaseModel):
         default="openai",
         description="Search provider to use: openai or tavily"
     )
+    strict_date_filtering: bool = Field(
+        default=True,
+        description="If true, require explicit publish dates within time window"
+    )
     evidence_budgets: Dict[str, int] = Field(
         default_factory=dict,
         description="Tool call budget per vertical"

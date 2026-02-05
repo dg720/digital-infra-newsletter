@@ -51,6 +51,12 @@ def web_search(
     
     evidence_items = []
     for result in results:
+        publish_date = (
+            result.get("published_date")
+            or result.get("publish_date")
+            or result.get("published")
+            or result.get("date")
+        )
         item = EvidenceItem(
             source_type="web",
             source_name="tavily",
@@ -58,6 +64,7 @@ def web_search(
             url=result.get("url"),
             title=result.get("title"),
             text=result.get("content"),
+            data={"publish_date": publish_date} if publish_date else None,
             reliability=_assess_reliability(result.get("url", "")),
             tags=["search_result"],
         )

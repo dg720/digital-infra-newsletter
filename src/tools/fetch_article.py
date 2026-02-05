@@ -1,6 +1,7 @@
 """Article fetch and parse tool using newspaper3k."""
 
 from datetime import datetime
+import re
 from typing import Optional
 from langchain_core.tools import tool
 
@@ -29,6 +30,8 @@ def fetch_article(url: str) -> Optional[EvidenceItem]:
         publish_date = None
         if article.publish_date:
             publish_date = article.publish_date.isoformat()
+        elif getattr(article, "html", None):
+            publish_date = _extract_publish_date_from_html(article.html)
         
         # Build evidence item
         item = EvidenceItem(
@@ -79,6 +82,41 @@ def _assess_article_reliability(url: str, article) -> str:
         return "medium"
     
     return "low"
+
+
+def _extract_publish_date_from_html(html: str) -> Optional[str]:
+    """Extract explicit publish date strings from raw HTML."""
+    month_names = (
+        "January|February|March|April|May|June|July|August|September|October|November|December|"
+        "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec"
+    )
+    patterns = [
+        (rf"(Published|Updated|Written|Posted|Date|On|Last\\s+updated|Last\\s+modified)\\s*[:\\-]?\\s*({month_names})\\s+(\\d{{1,2}})(?:st|nd|rd|th)?,\\s*(20\\d{{2}})\\s*\\d{{0,2}}:?\\d{{0,2}}", "mdy_prefix"),
+        (rf"(Published|Updated|Written|Posted|Date|On|Last\\s+updated|Last\\s+modified)\\s*[:\\-]?\\s*(\\d{{1,2}})(?:st|nd|rd|th)?\\s+({month_names})\\s+(20\\d{{2}})\\s*\\d{{0,2}}:?\\d{{0,2}}", "dmy_prefix"),
+        (rf"\\b({month_names})\\s+(\\d{{1,2}})(?:st|nd|rd|th)?,\\s*(20\\d{{2}})\\b", "mdy"),
+        (rf"\\b({month_names})\\s+(\\d{{1,2}})(?:st|nd|rd|th)?\\s+(20\\d{{2}})\\b", "mdy"),
+        (rf"\\b(\\d{{1,2}})(?:st|nd|rd|th)?\\s+({month_names})\\s+(20\\d{{2}})\\b", "dmy"),
+    ]
+    for pattern, order in patterns:
+        match = re.search(pattern, html, flags=re.IGNORECASE)
+        if not match:
+            continue
+        parts = match.groups()
+        if order == "mdy":
+            month, day, year = parts[0], parts[1], parts[2]
+        elif order == "mdy_prefix":
+            month, day, year = parts[1], parts[2], parts[3]
+        elif order == "dmy_prefix":
+            day, month, year = parts[1], parts[2], parts[3]
+        else:
+            day, month, year = parts[0], parts[1], parts[2]
+        for fmt in ("%d %B %Y", "%d %b %Y"):
+            try:
+                parsed = datetime.strptime(f"{day} {month} {year}", fmt)
+                return parsed.date().isoformat()
+            except ValueError:
+                continue
+    return None
 
 
 @tool

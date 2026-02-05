@@ -37,6 +37,10 @@ class GenerateRequest(BaseModel):
         default=None,
         description="Search provider to use: openai (default) or tavily"
     )
+    strict_date_filtering: Optional[bool] = Field(
+        default=None,
+        description="If true, require explicit publish dates within time window."
+    )
     max_review_rounds: int = Field(
         default=2,
         ge=1,

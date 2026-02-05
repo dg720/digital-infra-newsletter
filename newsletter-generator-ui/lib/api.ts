@@ -19,6 +19,7 @@ export interface GenerateRequest {
   style_prompt?: string | null;
   verticals?: string[];
   search_provider?: string;
+  strict_date_filtering?: boolean;
   max_review_rounds?: number;
   active_players?: { [vertical: string]: string[] };
 }
@@ -60,6 +61,9 @@ export interface EvidenceItem {
   title: string | null;
   source_name: string;
   url: string | null;
+  data?: {
+    publish_date?: string;
+  };
 }
 
 export interface Bullet {
@@ -116,6 +120,7 @@ export interface SectionForUI {
     title: string;
     source: string;
     url: string;
+    publishDate?: string;
   }>;
 }
 
@@ -428,6 +433,7 @@ export function convertToUIFormat(
         title: e.title || 'Source',
         source: e.source_name,
         url: e.url || '#',
+        publishDate: e.data?.publish_date,
       }));
 
     return {

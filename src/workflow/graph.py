@@ -34,6 +34,7 @@ class WorkflowState(TypedDict, total=False):
     active_players: Dict[str, List[str]]
     verticals: List[str]
     search_provider: str
+    strict_date_filtering: bool
     
     # Parsed state
     newsletter_state: Dict[str, Any]
@@ -118,6 +119,7 @@ async def run_newsletter_generation(
     active_players: dict | None = None,
     verticals: list[str] | None = None,
     search_provider: str | None = None,
+    strict_date_filtering: bool | None = None,
     time_window: Dict[str, Any] | None = None,
     region_focus: str | None = None,
     voice_profile: str | None = None,
@@ -148,6 +150,8 @@ async def run_newsletter_generation(
         initial_state["verticals"] = verticals
     if search_provider:
         initial_state["search_provider"] = search_provider
+    if strict_date_filtering is not None:
+        initial_state["strict_date_filtering"] = strict_date_filtering
     if time_window:
         initial_state["time_window"] = time_window
     if region_focus is not None:
@@ -169,6 +173,7 @@ async def run_newsletter_generation_streaming(
     active_players: dict = None,
     verticals: list[str] | None = None,
     search_provider: str | None = None,
+    strict_date_filtering: bool | None = None,
     time_window: Dict[str, Any] | None = None,
     region_focus: str | None = None,
     voice_profile: str | None = None,
@@ -213,6 +218,8 @@ async def run_newsletter_generation_streaming(
         initial_state["verticals"] = verticals
     if search_provider:
         initial_state["search_provider"] = search_provider
+    if strict_date_filtering is not None:
+        initial_state["strict_date_filtering"] = strict_date_filtering
     if time_window:
         initial_state["time_window"] = time_window
     if region_focus is not None:

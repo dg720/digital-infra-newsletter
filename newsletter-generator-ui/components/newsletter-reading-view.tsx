@@ -224,7 +224,6 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
     const Icon = config.icon
     const isUpdatingThis = updatingSection === key
     const isHighlighted = highlightedSection === key
-
     return (
       <section
         key={key}
@@ -367,6 +366,7 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
             </div>
           </div>
         )}
+
         </div>
       </section>
     )
@@ -377,7 +377,7 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
       {/* Newsletter Header */}
       <div className="border-b border-border bg-card/50">
         <div className="container mx-auto max-w-3xl px-4 py-10 print-container">
-          <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+          <h1 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl mb-3">
             {newsletter.title}
           </h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
@@ -414,17 +414,6 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
             <span className="text-border">|</span>
             <span>{newsletter.regions.join(", ")}</span>
           </div>
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportPdf}
-              className="no-print gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export PDF
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -434,6 +423,17 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
           {(Object.keys(newsletter.sections) as SectionKey[]).map((key) =>
             renderSection(key, newsletter.sections[key])
           )}
+        </div>
+        <div className="mt-12 flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportPdf}
+            className="no-print gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export PDF
+          </Button>
         </div>
       </article>
 
