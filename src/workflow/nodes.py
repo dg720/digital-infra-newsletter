@@ -191,8 +191,17 @@ def route_fix_plans_node(state: Dict[str, Any]) -> str:
     if not sections_to_fix or current_round >= newsletter_state.max_review_rounds:
         return "editor_pass"
     
-    # More fixes needed
-    return "research_fixes"
+    # More fixes needed - route to specific research nodes
+    section_to_node = {
+        "data_centers": "research_data_centers",
+        "connectivity_fibre": "research_connectivity_fibre",
+        "towers_wireless": "research_towers_wireless",
+    }
+    targets = [section_to_node[s] for s in sections_to_fix if s in section_to_node]
+    if not targets:
+        return "editor_pass"
+    # LangGraph supports returning a list of node names to execute in parallel
+    return targets  # type: ignore[return-value]
 
 
 async def editor_pass_node(state: Dict[str, Any]) -> Dict[str, Any]:

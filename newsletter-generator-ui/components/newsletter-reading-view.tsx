@@ -1,11 +1,19 @@
 "use client"
 
-import React from "react"
-
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { 
   Building2, 
   Cable, 
@@ -23,7 +31,7 @@ import {
   Download
 } from "lucide-react"
 import { fetchNewsletterDetail, apiClient } from "@/lib/api"
-import type { NewsletterDetail, SectionForUI } from "@/lib/api"
+import type { NewsletterDetail, SectionForUI, UpdateSourcesRequest } from "@/lib/api"
 
 interface NewsletterReadingViewProps {
   newsletterId: string
@@ -38,6 +46,15 @@ interface ChatMessage {
   content: string
   timestamp: Date
   status?: 'pending' | 'success' | 'error'
+}
+
+interface SourceEditItem {
+  id: string
+  url: string
+  title?: string | null
+  publishDate?: string | null
+  include: boolean
+  isNew?: boolean
 }
 
 const sectionConfig: Record<SectionKey, { title: string; icon: typeof Building2; backendId: string }> = {
@@ -74,6 +91,15 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
   const [highlightedSection, setHighlightedSection] = useState<SectionKey | null>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [isSourcesOpen, setIsSourcesOpen] = useState(false)
+  const [sourcesLoading, setSourcesLoading] = useState(false)
+  const [sourcesSaving, setSourcesSaving] = useState(false)
+  const [sourcesError, setSourcesError] = useState<string | null>(null)
+  const [sourcesBySection, setSourcesBySection] = useState<Record<SectionKey, SourceEditItem[]>>({
+    dataCenters: [],
+    connectivity: [],
+    towers: [],
+  })
 
   const loadNewsletter = useCallback(async () => {
     setIsLoading(true)
@@ -189,6 +215,101 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
   const handleExportPdf = () => {
     if (typeof window !== "undefined") {
       window.print()
+    }
+  }
+
+  const loadSourcesForEdit = useCallback(async () => {
+    if (!newsletter) return
+    setSourcesLoading(true)
+    setSourcesError(null)
+    try {
+      const nextState: Record<SectionKey, SourceEditItem[]> = {
+        dataCenters: [],
+        connectivity: [],
+        towers: [],
+      }
+      for (const [key, config] of Object.entries(sectionConfig) as [SectionKey, typeof sectionConfig[SectionKey]][]) {
+        try {
+          const pack = await apiClient.getEvidencePack(newsletterId, config.backendId)
+          nextState[key] = (pack.items || []).map((item) => ({
+            id: item.evidence_id,
+            url: item.url || "",
+            title: item.title,
+            publishDate: item.data?.publish_date || null,
+            include: true,
+          }))
+        } catch {
+          nextState[key] = []
+        }
+      }
+      setSourcesBySection(nextState)
+    } catch (err) {
+      setSourcesError(err instanceof Error ? err.message : "Failed to load sources")
+    } finally {
+      setSourcesLoading(false)
+    }
+  }, [newsletter, newsletterId])
+
+  const handleOpenSources = () => {
+    setIsSourcesOpen(true)
+    void loadSourcesForEdit()
+  }
+
+  const handleAddSource = (section: SectionKey) => {
+    setSourcesBySection((prev) => ({
+      ...prev,
+      [section]: [
+        ...prev[section],
+        {
+          id: `new-${Date.now()}-${section}`,
+          url: "",
+          title: null,
+          publishDate: null,
+          include: true,
+          isNew: true,
+        },
+      ],
+    }))
+  }
+
+  const handleSourceUpdate = (section: SectionKey, id: string, update: Partial<SourceEditItem>) => {
+    setSourcesBySection((prev) => ({
+      ...prev,
+      [section]: prev[section].map((item) => (item.id === id ? { ...item, ...update } : item)),
+    }))
+  }
+
+  const handleSaveSources = async () => {
+    setSourcesSaving(true)
+    setSourcesError(null)
+    try {
+      for (const [key, config] of Object.entries(sectionConfig) as [SectionKey, typeof sectionConfig[SectionKey]][]) {
+        const items = sourcesBySection[key] || []
+        const sources = items
+          .filter((item) => !item.isNew && item.url)
+          .map((item) => ({
+            url: item.url,
+            title: item.title || null,
+            publish_date: item.publishDate || null,
+            include: item.include,
+          }))
+        const addUrls = items
+          .filter((item) => item.isNew && item.url && item.include)
+          .map((item) => item.url.trim())
+
+        const payload: UpdateSourcesRequest = {
+          section_id: config.backendId,
+          sources,
+          add_urls: addUrls.length > 0 ? addUrls : undefined,
+        }
+        await apiClient.updateSources(newsletterId, payload)
+      }
+      await loadNewsletter()
+      setIsSourcesOpen(false)
+    } catch (err) {
+      setSourcesError(err instanceof Error ? err.message : "Failed to update sources")
+    } finally {
+      setSourcesSaving(false)
     }
   }
 
@@ -449,17 +570,22 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
           )}
 
           {/* Chat Toggle */}
-          <button
-            onClick={() => setIsChatExpanded(!isChatExpanded)}
-            className="flex w-full items-center justify-between py-3 text-sm font-medium text-foreground hover:text-primary"
-          >
-            <span>Edit this newsletter</span>
-            {isChatExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronUp className="h-4 w-4" />
-            )}
-          </button>
+          <div className="flex items-center justify-between py-3">
+            <button
+              onClick={() => setIsChatExpanded(!isChatExpanded)}
+              className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary"
+            >
+              <span>Edit this newsletter</span>
+              {isChatExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronUp className="h-4 w-4" />
+              )}
+            </button>
+            <Button variant="outline" size="sm" onClick={handleOpenSources}>
+              Edit sources
+            </Button>
+          </div>
 
           {/* Chat Messages */}
           {isChatExpanded && (
@@ -534,6 +660,93 @@ export function NewsletterReadingView({ newsletterId, onBack }: NewsletterReadin
           </div>
         </div>
       </div>
+
+      <Dialog open={isSourcesOpen} onOpenChange={setIsSourcesOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Sources</DialogTitle>
+            <DialogDescription>
+              Toggle sources to include, or add new URLs to regenerate the section.
+            </DialogDescription>
+          </DialogHeader>
+
+          {sourcesLoading ? (
+            <p className="text-sm text-muted-foreground">Loading sources...</p>
+          ) : (
+            <div className="space-y-6">
+              {sourcesError && (
+                <p className="text-sm text-destructive">{sourcesError}</p>
+              )}
+              {(Object.keys(sectionConfig) as SectionKey[]).map((sectionKey) => (
+                <div key={sectionKey} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">{sectionConfig[sectionKey].title}</Label>
+                    <Button variant="outline" size="sm" onClick={() => handleAddSource(sectionKey)}>
+                      Add source
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {sourcesBySection[sectionKey].length === 0 && (
+                      <p className="text-xs text-muted-foreground">No sources loaded.</p>
+                    )}
+                    {sourcesBySection[sectionKey].map((source) => (
+                      <div
+                        key={source.id}
+                        className="rounded-md border border-border/60 bg-muted/20 px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 space-y-1">
+                            {source.isNew ? (
+                              <Input
+                                placeholder="Paste source URL"
+                                value={source.url}
+                                onChange={(e) =>
+                                  handleSourceUpdate(sectionKey, source.id, { url: e.target.value })
+                                }
+                              />
+                            ) : (
+                              <>
+                                <p className="text-sm font-medium text-foreground">
+                                  {source.title || "Untitled source"}
+                                </p>
+                                <p className="text-xs text-muted-foreground break-all">{source.url}</p>
+                              </>
+                            )}
+                          </div>
+                          <Switch
+                            checked={source.include}
+                            onCheckedChange={(checked) =>
+                              handleSourceUpdate(sectionKey, source.id, { include: checked })
+                            }
+                          />
+                        </div>
+                        {!source.isNew && source.publishDate && (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Published {new Date(source.publishDate).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-6 flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsSourcesOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={handleSaveSources} disabled={sourcesSaving}>
+              {sourcesSaving ? "Saving..." : "Save & Regenerate"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

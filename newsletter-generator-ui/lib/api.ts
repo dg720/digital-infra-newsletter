@@ -45,6 +45,25 @@ export interface UpdateSectionResponse {
   status: string;
 }
 
+export interface SourceOverride {
+  url: string;
+  title?: string | null;
+  publish_date?: string | null;
+  include: boolean;
+}
+
+export interface UpdateSourcesRequest {
+  section_id: string;
+  sources: SourceOverride[];
+  add_urls?: string[];
+}
+
+export interface UpdateSourcesResponse {
+  newsletter_id: string;
+  section_id: string;
+  status: string;
+}
+
 export interface NewsletterMeta {
   newsletter_id: string;
   original_prompt: string;
@@ -252,6 +271,29 @@ class ApiClient {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.detail || 'Failed to update section');
+    }
+
+    return response.json();
+  }
+
+  async updateSources(
+    newsletterId: string,
+    request: UpdateSourcesRequest
+  ): Promise<UpdateSourcesResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/newsletter/${newsletterId}/update-sources`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to update sources');
     }
 
     return response.json();

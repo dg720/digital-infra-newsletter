@@ -15,7 +15,7 @@ from ..schemas.evidence import EvidenceItem, EvidencePack
 from ..schemas.sections import SectionDraft, Bullet
 from ..constants import Vertical, MAJOR_PLAYERS, SECTOR_KEYWORDS, VERTICAL_DISPLAY_NAMES
 from ..utils.citations import extract_evidence_ids, normalize_evidence_ids, strip_evidence_markers
-from ..tools import web_search, openai_web_search, fetch_article
+from ..tools import web_search, openai_web_search, fetch_article, extract_publish_date_newspaper4k
 
 
 # System prompt template for research agents
@@ -159,15 +159,42 @@ async def research_vertical(
         
         for results in search_results_list:
             for item in results:
-                _ensure_publish_date(item)
-                if _is_outside_time_window(
-                    item,
-                    state.time_window.start,
-                    state.time_window.end,
-                    require_publish_date=strict_dates,
-                ):
-                    continue
                 evidence_pack.add_item(item)
+
+        # First pass: run all URLs through newspaper4k for publish dates
+        url_items = [item for item in evidence_pack.items if item.url]
+        if url_items:
+            url_to_items = {}
+            for item in url_items:
+                url_to_items.setdefault(item.url, []).append(item)
+            tasks = [
+                loop.run_in_executor(None, extract_publish_date_newspaper4k, url)
+                for url in url_to_items.keys()
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for url, publish_date in zip(url_to_items.keys(), results):
+                if isinstance(publish_date, Exception):
+                    continue
+                if publish_date:
+                    for item in url_to_items[url]:
+                        if item.data is None:
+                            item.data = {}
+                        if isinstance(item.data, dict):
+                            item.data["publish_date"] = publish_date
+
+        # Apply date parsing and window filtering
+        filtered_items = []
+        for item in evidence_pack.items:
+            _ensure_publish_date(item)
+            if _is_outside_time_window(
+                item,
+                state.time_window.start,
+                state.time_window.end,
+                require_publish_date=strict_dates,
+            ):
+                continue
+            filtered_items.append(item)
+        evidence_pack.items = filtered_items
 
     # 2. Parallelize Article Fetching + Date Filtering
     # -------------------------------
@@ -497,4 +524,13 @@ async def _draft_section(
             + (["Auto-assigned evidence IDs due to missing citations."] if auto_assigned else [])
         ),
     )
+
+
+async def draft_section_from_evidence(
+    vertical: Vertical,
+    state: NewsletterState,
+    evidence_pack: EvidencePack,
+) -> SectionDraft:
+    """Draft a section using a provided evidence pack."""
+    return await _draft_section(vertical, state, evidence_pack)
 

@@ -101,7 +101,9 @@ def create_newsletter_graph() -> StateGraph:
         route_fix_plans_node,
         {
             "editor_pass": "editor_pass",
-            "research_fixes": "research_data_centers",  # Simplified - revisit all
+            "research_data_centers": "research_data_centers",
+            "research_connectivity_fibre": "research_connectivity_fibre",
+            "research_towers_wireless": "research_towers_wireless",
         }
     )
     

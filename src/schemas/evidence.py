@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, List, Any, Literal
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from pydantic import BaseModel, Field
 import uuid
 
@@ -18,7 +19,7 @@ class EvidenceItem(BaseModel):
     source_type: Literal["web", "news", "market_data"] = Field(
         description="Type of source: web, news, or market_data"
     )
-    source_name: Literal["tavily", "openai_web_search", "newspaper3k", "yfinance"] = Field(
+    source_name: Literal["tavily", "openai_web_search", "newspaper3k", "newspaper4k", "yfinance", "manual_override"] = Field(
         description="Name of the tool that retrieved this evidence"
     )
     retrieved_at: datetime = Field(
@@ -55,7 +56,18 @@ class EvidencePack(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     def add_item(self, item: EvidenceItem) -> None:
-        """Add an evidence item to the pack."""
+        """Add an evidence item to the pack with basic deduping."""
+        if item.url:
+            item_key = _normalize_url(item.url)
+            for existing in self.items:
+                if existing.url and _normalize_url(existing.url) == item_key:
+                    return
+        else:
+            title_key = (item.title or "").strip().lower()
+            if title_key:
+                for existing in self.items:
+                    if not existing.url and (existing.title or "").strip().lower() == title_key:
+                        return
         self.items.append(item)
     
     def get_item_by_id(self, evidence_id: str) -> Optional[EvidenceItem]:
@@ -73,3 +85,20 @@ class EvidencePack(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+
+
+def _normalize_url(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        query_params = [
+            (k, v)
+            for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+            if not k.lower().startswith("utm_")
+            and k.lower() not in {"ref", "ref_src", "source", "fbclid", "gclid", "mc_cid", "mc_eid"}
+        ]
+        clean_query = urlencode(query_params, doseq=True)
+        netloc = parsed.netloc.lower()
+        scheme = parsed.scheme.lower()
+        return urlunparse((scheme, netloc, parsed.path.rstrip("/"), "", clean_query, ""))
+    except Exception:
+        return url

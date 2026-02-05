@@ -1,4 +1,4 @@
-"""Article fetch and parse tool using newspaper3k."""
+"""Article fetch and parse tool using newspaper4k."""
 
 from datetime import datetime
 import re
@@ -10,7 +10,7 @@ from ..schemas.evidence import EvidenceItem
 
 def fetch_article(url: str) -> Optional[EvidenceItem]:
     """
-    Fetch and parse an article from a URL using newspaper3k.
+    Fetch and parse an article from a URL using newspaper4k.
     
     Args:
         url: The article URL to fetch and parse.
@@ -19,24 +19,21 @@ def fetch_article(url: str) -> Optional[EvidenceItem]:
         EvidenceItem with cleaned text, title, authors, and publish date.
         Returns None if the article cannot be fetched/parsed.
     """
-    from newspaper import Article
+    import newspaper
     
     try:
-        article = Article(url)
-        article.download()
-        article.parse()
+        article = newspaper.article(url)
         
         # Extract publish date
         publish_date = None
-        if article.publish_date:
-            publish_date = article.publish_date.isoformat()
-        elif getattr(article, "html", None):
+        publish_date = _normalize_publish_date(getattr(article, "publish_date", None))
+        if not publish_date and getattr(article, "html", None):
             publish_date = _extract_publish_date_from_html(article.html)
         
         # Build evidence item
         item = EvidenceItem(
             source_type="news",
-            source_name="newspaper3k",
+            source_name="newspaper4k",
             retrieved_at=datetime.utcnow(),
             url=url,
             title=article.title,
@@ -82,6 +79,30 @@ def _assess_article_reliability(url: str, article) -> str:
         return "medium"
     
     return "low"
+
+
+def extract_publish_date_newspaper4k(url: str) -> Optional[str]:
+    """Extract publish date using newspaper4k for a URL."""
+    try:
+        import newspaper
+        article = newspaper.article(url)
+        publish_date = _normalize_publish_date(getattr(article, "publish_date", None))
+        if not publish_date and getattr(article, "html", None):
+            publish_date = _extract_publish_date_from_html(article.html)
+        return publish_date
+    except Exception as exc:
+        print(f"Error extracting publish date for {url}: {exc}")
+        return None
+
+
+def _normalize_publish_date(value) -> Optional[str]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, str):
+        return value
+    return None
 
 
 def _extract_publish_date_from_html(html: str) -> Optional[str]:

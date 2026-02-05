@@ -87,6 +87,39 @@ class UpdateSectionResponse(BaseModel):
     status: str = Field(default="completed")
 
 
+class SourceOverride(BaseModel):
+    """Source override for manual inclusion/exclusion."""
+
+    url: str = Field(description="Source URL")
+    title: Optional[str] = Field(default=None, description="Optional source title")
+    publish_date: Optional[str] = Field(default=None, description="Optional publish date")
+    include: bool = Field(default=True, description="Whether to include this source")
+
+
+class UpdateSourcesRequest(BaseModel):
+    """Request body for POST /newsletter/{newsletter_id}/update-sources."""
+
+    section_id: str = Field(
+        description="Section to update: data_centers, connectivity_fibre, or towers_wireless"
+    )
+    sources: list[SourceOverride] = Field(
+        default_factory=list,
+        description="All sources with include toggles"
+    )
+    add_urls: Optional[list[str]] = Field(
+        default=None,
+        description="Additional URLs to fetch and include"
+    )
+
+
+class UpdateSourcesResponse(BaseModel):
+    """Response for POST /newsletter/{newsletter_id}/update-sources."""
+
+    newsletter_id: str
+    section_id: str
+    status: str = Field(default="updated")
+
+
 class NewsletterMetadata(BaseModel):
     """Metadata stored in meta.json for each newsletter issue."""
     

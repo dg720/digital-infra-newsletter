@@ -15,14 +15,17 @@ from .schemas.api import (
     GenerateResponse,
     UpdateSectionRequest,
     UpdateSectionResponse,
+    UpdateSourcesRequest,
+    UpdateSourcesResponse,
 )
 from .schemas.state import NewsletterState, TimeWindow
 from .schemas.sections import SectionDraft
-from .schemas.evidence import EvidencePack
+from .schemas.evidence import EvidencePack, EvidenceItem
 from .workflow.graph import run_newsletter_generation
 from .storage.artifacts import ArtifactStore
 from .constants import Vertical
-from .agents.research import research_vertical
+from .agents.research import research_vertical, draft_section_from_evidence, _is_outside_time_window, _ensure_publish_date
+from .tools import fetch_article, extract_publish_date_newspaper4k
 from .agents.reviewer import review_section
 from .agents.editor import edit_sections
 
@@ -328,6 +331,193 @@ async def update_section(
             status="updated",
         )
         
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/newsletter/{newsletter_id}/update-sources", response_model=UpdateSourcesResponse)
+async def update_sources(
+    newsletter_id: str,
+    request: UpdateSourcesRequest,
+) -> UpdateSourcesResponse:
+    """
+    Update sources for a section and regenerate it.
+    """
+    store = ArtifactStore()
+
+    if not store.read_newsletter(newsletter_id):
+        raise HTTPException(status_code=404, detail=f"Newsletter {newsletter_id} not found")
+
+    section_id_map = {
+        "data_centers": Vertical.DATA_CENTERS,
+        "connectivity_fibre": Vertical.CONNECTIVITY_FIBRE,
+        "towers_wireless": Vertical.TOWERS_WIRELESS,
+    }
+
+    if request.section_id not in section_id_map:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid section_id. Must be one of: {list(section_id_map.keys())}"
+        )
+
+    vertical = section_id_map[request.section_id]
+
+    try:
+        meta = store.read_artifact(newsletter_id, "meta.json")
+        if not meta:
+            raise HTTPException(status_code=404, detail="Newsletter metadata not found")
+
+        from datetime import date
+        newsletter_state = NewsletterState(
+            run_id=newsletter_id,
+            time_window=TimeWindow(
+                start=date.fromisoformat(meta["time_window"]["start"]),
+                end=date.fromisoformat(meta["time_window"]["end"]),
+            ),
+            voice_profile=meta.get("voice_profile", "expert_operator"),
+            region_focus=meta.get("region_focus"),
+            style_prompt=meta.get("style_prompt"),
+            original_prompt=meta.get("original_prompt", ""),
+        )
+
+        evidence_pack = EvidencePack(section_id=request.section_id)
+
+        for source in request.sources:
+            if not source.include:
+                continue
+            item = EvidenceItem(
+                source_type="web",
+                source_name="manual_override",
+                url=source.url,
+                title=source.title,
+                text=None,
+                data={"publish_date": source.publish_date} if source.publish_date else None,
+                tags=["manual_override"],
+            )
+            if not item.data or not item.data.get("publish_date"):
+                publish_date = extract_publish_date_newspaper4k(source.url)
+                if publish_date:
+                    item.data = {"publish_date": publish_date}
+            _ensure_publish_date(item)
+            if _is_outside_time_window(
+                item,
+                newsletter_state.time_window.start,
+                newsletter_state.time_window.end,
+                require_publish_date=newsletter_state.strict_date_filtering,
+            ):
+                continue
+            evidence_pack.add_item(item)
+
+        if request.add_urls:
+            for url in request.add_urls:
+                if not url:
+                    continue
+                fetched = fetch_article(url)
+                if fetched:
+                    _ensure_publish_date(fetched)
+                    if _is_outside_time_window(
+                        fetched,
+                        newsletter_state.time_window.start,
+                        newsletter_state.time_window.end,
+                        require_publish_date=newsletter_state.strict_date_filtering,
+                    ):
+                        continue
+                    evidence_pack.add_item(fetched)
+                else:
+                    publish_date = extract_publish_date_newspaper4k(url)
+                    item = EvidenceItem(
+                        source_type="web",
+                        source_name="manual_override",
+                        url=url,
+                        title=None,
+                        text=None,
+                        data={"publish_date": publish_date} if publish_date else None,
+                        tags=["manual_override"],
+                    )
+                    _ensure_publish_date(item)
+                    if _is_outside_time_window(
+                        item,
+                        newsletter_state.time_window.start,
+                        newsletter_state.time_window.end,
+                        require_publish_date=newsletter_state.strict_date_filtering,
+                    ):
+                        continue
+                    evidence_pack.add_item(item)
+
+        draft = await draft_section_from_evidence(vertical, newsletter_state, evidence_pack)
+
+        review_result = await review_section(
+            draft=draft,
+            evidence_pack=evidence_pack,
+            state=newsletter_state,
+            review_round=1,
+        )
+
+        edited_drafts, changes_made = await edit_sections(
+            {request.section_id: draft},
+            newsletter_state,
+        )
+
+        final_draft = edited_drafts.get(request.section_id, draft)
+
+        store.write_section(newsletter_id, request.section_id, final_draft)
+        store.write_evidence_pack(newsletter_id, request.section_id, evidence_pack)
+
+        existing_md = store.read_newsletter(newsletter_id)
+        if existing_md:
+            all_drafts = {}
+            all_evidence = {}
+            for section_id in section_id_map.keys():
+                section_data = store.read_artifact(newsletter_id, f"sections/{section_id}.json")
+                if section_data:
+                    all_drafts[section_id] = SectionDraft(**section_data)
+                evidence_data = store.read_artifact(newsletter_id, f"evidence/{section_id}_pack.json")
+                if evidence_data:
+                    all_evidence[section_id] = EvidencePack(**evidence_data)
+
+            all_drafts[request.section_id] = final_draft
+            all_evidence[request.section_id] = evidence_pack
+
+            from .constants import VERTICAL_DISPLAY_NAMES
+            lines = [
+                f"# Digital Infra Newsletter â€” {newsletter_state.time_window.end.isoformat()}",
+                "",
+                f"_Time window: {newsletter_state.time_window.start.isoformat()} to {newsletter_state.time_window.end.isoformat()}_  ",
+                f"_Voice: {newsletter_state.voice_profile}_",
+                "",
+                "---",
+                "",
+            ]
+
+            for sid, v in section_id_map.items():
+                if sid in all_drafts:
+                    display_name = VERTICAL_DISPLAY_NAMES.get(v, sid)
+                    ep = all_evidence.get(sid)
+                    lines.append(f"## {display_name}")
+                    lines.append("")
+                    lines.append(all_drafts[sid].to_markdown(ep))
+                    lines.append("")
+                    lines.append("---")
+                    lines.append("")
+
+            new_md = "\n".join(lines)
+            store.write_newsletter(newsletter_id, new_md)
+
+        store.write_changelog(newsletter_id, [{
+            "action": "update_sources",
+            "section_id": request.section_id,
+            "changes": changes_made,
+            "review": review_result.model_dump(),
+        }])
+
+        return UpdateSourcesResponse(
+            newsletter_id=newsletter_id,
+            section_id=request.section_id,
+            status="updated",
+        )
+
     except HTTPException:
         raise
     except Exception as e:
